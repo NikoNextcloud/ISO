@@ -4,6 +4,7 @@ import { cloneElement, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { Archive, Download, FileArchive, FolderTree, Loader2, ShieldCheck } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { storageErrorMessage } from "@/lib/storage-errors";
 import type { Organization, OrganizationHistoryEntry } from "@/lib/types";
 
 type ExportForm = {
@@ -108,7 +109,7 @@ export function Iso27001ExportWorkspace() {
     if (supabase && user) {
       const filePath = `${selectedId}/systems/${Date.now()}-${safeFileName(filename)}`;
       const upload = await supabase.storage.from("organization-files").upload(filePath, blob, { contentType: "application/zip", upsert: false });
-      if (upload.error) throw new Error(`ZIP файлът е изтеглен, но не беше запазен в историята: ${upload.error.message}. Изпълнете миграция 005 в Supabase.`);
+      if (upload.error) throw new Error(`ZIP файлът е изтеглен, но не беше запазен в историята: ${storageErrorMessage(upload.error.message)}`);
       entry.filePath = filePath;
       const { error } = await supabase.from("organization_history").insert({ id: entry.id, organization_id: selectedId, user_id: user.id, event_type: entry.eventType, description, event_date: eventDate, file_path: filePath, file_name: filename, file_size: blob.size });
       if (error) throw new Error(`ZIP файлът е качен, но историята не беше записана: ${error.message}`);

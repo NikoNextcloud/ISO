@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { Copy, Download, Edit3, FilePlus2, FileText, Loader2, Search, Trash2, Upload, X } from "lucide-react";
 import { Section, StandardPills, StatusBadge } from "@/components/ui";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { storageErrorMessage } from "@/lib/storage-errors";
 import type { DocumentStatus, ImsDocument, IsoStandardCode, Organization } from "@/lib/types";
 
 const DOCUMENTS_KEY = "iso-certification-documents-v1";
@@ -105,7 +106,7 @@ export function DocumentWorkspace() {
         if (pendingFile.size > 50 * 1024 * 1024) { setLoading(false); return setError("Файлът е по-голям от разрешените 50 MB."); }
         const filePath = `${value.organizationId}/documents/${value.id}/${Date.now()}-${safeFileName(pendingFile.name)}`;
         const upload = await supabase.storage.from("organization-files").upload(filePath, pendingFile, { contentType: pendingFile.type || "application/octet-stream", upsert: false });
-        if (upload.error) { setLoading(false); return setError(`Файлът не беше качен: ${upload.error.message}. Изпълнете миграция 005 в Supabase.`); }
+        if (upload.error) { setLoading(false); return setError(`Файлът не беше качен: ${storageErrorMessage(upload.error.message)}`); }
         uploadedPath = filePath;
         value = { ...value, filePath, fileName: pendingFile.name, fileSize: pendingFile.size, mimeType: pendingFile.type || "application/octet-stream" };
       }

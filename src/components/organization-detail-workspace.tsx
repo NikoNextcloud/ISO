@@ -6,6 +6,7 @@ import type { User } from "@supabase/supabase-js";
 import { ArrowLeft, Award, Building2, CalendarClock, Download, FileArchive, FileText, History, Loader2, Plus, Save, Trash2, Upload } from "lucide-react";
 import { StandardPills, StatusBadge } from "@/components/ui";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
+import { storageErrorMessage } from "@/lib/storage-errors";
 import type { DocumentStatus, ImsDocument, IsoStandardCode, Organization, OrganizationCertificate, OrganizationHistoryEntry, OrganizationStatus } from "@/lib/types";
 
 const ORGANIZATIONS_KEY = "iso-certification-organizations-v2";
@@ -150,7 +151,7 @@ export function OrganizationDetailWorkspace({ organizationId }: { organizationId
     const id = makeId();
     const filePath = `${organizationId}/documents/${id}/${Date.now()}-${safeFileName(file.name)}`;
     const upload = await supabase.storage.from("organization-files").upload(filePath, file, { contentType: file.type || "application/octet-stream", upsert: false });
-    if (upload.error) { setSaving(false); return setError(`Файлът не беше качен: ${upload.error.message}. Изпълнете миграция 005 в Supabase.`); }
+    if (upload.error) { setSaving(false); return setError(`Файлът не беше качен: ${storageErrorMessage(upload.error.message)}`); }
     const document: ImsDocument = { id, organizationId, title: file.name, type: "form", standards: organization.standards.length ? [...organization.standards] : ["ISO 9001"], owner: organization.manager, status: "draft", version: "1.0", updatedAt: new Date().toISOString().slice(0, 10), content: "Качен фирмен файл", filePath, fileName: file.name, fileSize: file.size, mimeType: file.type || "application/octet-stream" };
     const result = await supabase.from("documents").insert(documentToDatabase(document)).select().single();
     if (result.error) {
