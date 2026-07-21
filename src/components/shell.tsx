@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import {
   Building2,
   FileText,
+  HardDrive,
   LayoutDashboard,
   RefreshCw,
   ShieldCheck,
@@ -15,7 +17,8 @@ const navItems = [
   { href: "/dashboard", label: "Табло", icon: LayoutDashboard },
   { href: "/organizations", label: "Фирми", icon: Building2 },
   { href: "/standards", label: "Стандарти", icon: ShieldCheck },
-  { href: "/documents", label: "Документи", icon: FileText }
+  { href: "/documents", label: "Документи", icon: FileText },
+  { href: "/storage", label: "Хранилище", icon: HardDrive }
 ] as const;
 
 const pageContent = {
@@ -38,6 +41,11 @@ const pageContent = {
     eyebrow: "ФИРМЕН АРХИВ",
     title: "Документи и файлове",
     description: "Централизирано управление на цялата ISO документация"
+  },
+  storage: {
+    eyebrow: "SUPABASE STORAGE",
+    title: "Хранилище и използвано място",
+    description: "Контрол на файловете, капацитета и фирмените архиви"
   }
 } as const;
 
@@ -49,7 +57,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ? "standards"
       : pathname.startsWith("/documents")
         ? "documents"
-        : "dashboard";
+        : pathname.startsWith("/storage")
+          ? "storage"
+          : "dashboard";
   const page = pageContent[section];
 
   const nav = (compact = false) => navItems.map((item) => {
@@ -58,7 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Link
         aria-current={selected ? "page" : undefined}
         className={`${compact ? "shrink-0" : "w-full"} focus-ring flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold transition-all ${selected ? "bg-[#111827] text-white shadow-[0_10px_24px_rgba(17,24,39,0.18)]" : "text-slate-600 hover:bg-slate-100 hover:text-ink"}`}
-        href={item.href}
+        href={item.href as Route}
         key={item.href}
       >
         <item.icon className={`h-[18px] w-[18px] shrink-0 ${selected ? "text-white" : "text-slate-500"}`} />
