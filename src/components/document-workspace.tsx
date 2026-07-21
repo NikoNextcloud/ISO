@@ -43,6 +43,8 @@ export function DocumentWorkspace() {
   const [generatedSystems, setGeneratedSystems] = useState<OrganizationHistoryEntry[]>([]);
   const [organizations, setOrganizations] = useState<{ id: string; name: string }[]>(supabase ? [] : localOrganizations);
   const [editing, setEditing] = useState<ImsDocument | null>(null);
+  const [editingSystem, setEditingSystem] = useState<OrganizationHistoryEntry | null>(null);
+  const [pendingSystemFile, setPendingSystemFile] = useState<File | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(Boolean(supabase));
@@ -173,11 +175,62 @@ export function DocumentWorkspace() {
     anchor.href = url; anchor.download = item.fileName; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
   }
 
+  async function saveGeneratedSystem(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingSystem || !editingSystem.description.trim()) return setError("Описанието е задължително.");
+    let value = { ...editingSystem, fileName: editingSystem.fileName?.trim() || undefined, description: editingSystem.description.trim() };
+    setLoading(true); setError("");
+    if (supabase && user) {
+      let replacementPath = "";
+      if (pendingSystemFile) {
+        if (pendingSystemFile.size > 50 * 1024 * 1024) { setLoading(false); return setError("ZIP файлът е по-голям от разрешените 50 MB."); }
+        if (!pendingSystemFile.name.toLowerCase().endsWith(".zip")) { setLoading(false); return setError("Изберете файл във формат ZIP."); }
+        replacementPath = `${value.organizationId}/systems/${Date.now()}-${safeFileName(pendingSystemFile.name)}`;
+        const upload = await supabase.storage.from("organization-files").upload(replacementPath, pendingSystemFile, { contentType: "application/zip", upsert: false });
+        if (upload.error) { setLoading(false); return setError(`Новият ZIP не беше качен: ${storageErrorMessage(upload.error.message)}`); }
+        value = { ...value, filePath: replacementPath, fileName: pendingSystemFile.name, fileSize: pendingSystemFile.size };
+      }
+      const { error } = await supabase.from("organization_history").update({ file_path: value.filePath ?? null, file_name: value.fileName ?? null, file_size: value.fileSize ?? null, description: value.description }).eq("id", value.id);
+      if (error) {
+        if (replacementPath) await supabase.storage.from("organization-files").remove([replacementPath]);
+        setLoading(false); return setError(`Промените не бяха записани: ${error.message}`);
+      }
+      if (replacementPath && editingSystem.filePath && editingSystem.filePath !== replacementPath) await supabase.storage.from("organization-files").remove([editingSystem.filePath]);
+    } else {
+      if (pendingSystemFile) { setLoading(false); return setError("Замяната на ZIP файл изисква връзка със Supabase."); }
+      const history = JSON.parse(window.localStorage.getItem(HISTORY_KEY) ?? "[]") as OrganizationHistoryEntry[];
+      window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history.map((item) => item.id === value.id ? value : item)));
+    }
+    setGeneratedSystems((current) => current.map((item) => item.id === value.id ? value : item));
+    setEditingSystem(null); setPendingSystemFile(null); setLoading(false);
+  }
+
+  async function deleteGeneratedSystem(item: OrganizationHistoryEntry) {
+    if (!window.confirm(`Да бъде ли изтрита генерираната система „${item.fileName || "ISO система"}“? ZIP файлът ще бъде премахнат от Supabase.`)) return;
+    setLoading(true); setError("");
+    if (supabase && user) {
+      if (item.filePath) {
+        const removed = await supabase.storage.from("organization-files").remove([item.filePath]);
+        if (removed.error) { setLoading(false); return setError(`ZIP файлът не беше изтрит: ${storageErrorMessage(removed.error.message)}`); }
+      }
+      const { error } = await supabase.from("organization_history").delete().eq("id", item.id);
+      if (error) { setLoading(false); return setError(`Записът не беше изтрит: ${error.message}`); }
+    } else {
+      const history = JSON.parse(window.localStorage.getItem(HISTORY_KEY) ?? "[]") as OrganizationHistoryEntry[];
+      window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history.filter((entry) => entry.id !== item.id)));
+    }
+    setGeneratedSystems((current) => current.filter((entry) => entry.id !== item.id));
+    setLoading(false);
+  }
+
   return <Section id="documents" title="Документи" description="Пълен регистър с редактиране на съдържание, версии, статуси и приложими стандарти.">
     {supabase && authChecked && !user ? <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Влезте в приложението, за да управлявате документите в Supabase.</div> : <>
       <section className="mb-8">
         <div className="mb-4 flex items-end justify-between gap-3"><div><h3 className="flex items-center gap-2 text-base font-bold text-ink"><FileArchive className="h-5 w-5 text-teal-600" />Генерирани системи</h3><p className="mt-1 text-sm text-slate-500">Архив на всички генерирани ZIP версии по фирми.</p></div><span className="rounded-md border border-line bg-white px-3 py-1.5 text-sm font-semibold text-slate-600">{generatedSystems.length}</span></div>
-        {generatedSystems.length ? <div className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-white shadow-soft">{generatedSystems.map((item) => <article className="flex flex-col justify-between gap-4 p-4 sm:flex-row sm:items-center" key={item.id}><div className="min-w-0"><div className="flex items-center gap-2"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700"><FileArchive className="h-4 w-4" /></span><div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{item.fileName || "Генерирана ISO система"}</p><p className="mt-0.5 text-xs text-slate-500">{organizations.find((organization) => organization.id === item.organizationId)?.name ?? "Фирма"} · {formatDateTime(item.eventDate)}{item.fileSize ? ` · ${formatFileSize(item.fileSize)}` : ""}</p></div></div><p className="mt-3 text-sm text-slate-600 sm:ml-11">{item.description}</p></div>{item.filePath && item.fileName ? <button className="focus-ring inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-white px-4 text-sm font-semibold text-action hover:bg-blue-50" onClick={() => downloadGeneratedSystem(item)} type="button"><Download className="h-4 w-4" />Свали ZIP</button> : <span className="shrink-0 text-xs font-medium text-amber-700">Стар запис без ZIP файл</span>}</article>)}</div> : <div className="rounded-lg border border-dashed border-line bg-white py-9 text-center"><FileArchive className="mx-auto h-6 w-6 text-slate-300" /><p className="mt-2 text-sm text-slate-500">Все още няма генерирани системи.</p></div>}
+        {generatedSystems.length ? <div className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-white shadow-soft">{generatedSystems.map((item) => <article className="flex flex-col justify-between gap-4 p-4 sm:flex-row sm:items-center" key={item.id}>
+          <div className="min-w-0"><div className="flex items-center gap-2"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700"><FileArchive className="h-4 w-4" /></span><div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{item.fileName || "Генерирана ISO система"}</p><p className="mt-0.5 text-xs text-slate-500">{organizations.find((organization) => organization.id === item.organizationId)?.name ?? "Фирма"} · {formatDateTime(item.eventDate)}{item.fileSize ? ` · ${formatFileSize(item.fileSize)}` : ""}</p></div></div><p className="mt-3 text-sm text-slate-600 sm:ml-11">{item.description}</p></div>
+          <div className="flex shrink-0 items-center justify-end gap-1">{item.filePath && item.fileName ? <button aria-label="Свали ZIP" className="focus-ring grid h-10 w-10 place-items-center rounded-lg text-action hover:bg-blue-50" onClick={() => downloadGeneratedSystem(item)} title="Свали ZIP" type="button"><Download className="h-4 w-4" /></button> : <span className="mr-2 text-xs font-medium text-amber-700">Стар запис без ZIP</span>}<button aria-label="Редактирай системата" className="focus-ring grid h-10 w-10 place-items-center rounded-lg text-slate-600 hover:bg-panel hover:text-action" onClick={() => { setError(""); setPendingSystemFile(null); setEditingSystem({ ...item }); }} title="Редактирай или замени ZIP" type="button"><Edit3 className="h-4 w-4" /></button><button aria-label="Изтрий системата" className="focus-ring grid h-10 w-10 place-items-center rounded-lg text-red-600 hover:bg-red-50" onClick={() => void deleteGeneratedSystem(item)} title="Изтрий ZIP и записа" type="button"><Trash2 className="h-4 w-4" /></button></div>
+        </article>)}</div> : <div className="rounded-lg border border-dashed border-line bg-white py-9 text-center"><FileArchive className="mx-auto h-6 w-6 text-slate-300" /><p className="mt-2 text-sm text-slate-500">Все още няма генерирани системи.</p></div>}
       </section>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row"><div className="flex h-11 flex-1 items-center gap-2 rounded-lg border border-line bg-white px-3 shadow-sm"><Search className="h-4 w-4 text-slate-400" /><input aria-label="Търсене на документи" className="focus-ring w-full border-0 bg-transparent text-sm outline-none" onChange={(event) => setQuery(event.target.value)} placeholder="Търсене по заглавие, файл, собственик, версия или стандарт" value={query} /></div><button className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-action px-5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50" disabled={!organizations.length} onClick={openNew} type="button"><FilePlus2 className="h-4 w-4" />Добави документ</button></div>
       {error ? <p className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
@@ -197,6 +250,12 @@ export function DocumentWorkspace() {
         <label className="sm:col-span-2"><span className="mb-2 block text-sm font-medium text-ink">Прикачен файл</span><span className="flex min-h-12 cursor-pointer items-center gap-3 rounded border border-dashed border-line bg-panel px-4 py-3 text-sm text-slate-600 hover:border-action"><Upload className="h-5 w-5 text-action" /><span>{pendingFile ? `${pendingFile.name} · ${formatFileSize(pendingFile.size)}` : editing.fileName ? `Текущ файл: ${editing.fileName} · Изберете нов за замяна` : "Изберете PDF, DOCX, XLSX, снимка, ZIP или друг фирмен файл"}</span><input className="sr-only" onChange={(event) => { const file = event.target.files?.[0] ?? null; setPendingFile(file); if (file && !editing.title.trim()) setEditing({ ...editing, title: file.name }); }} type="file" /></span></label>
         <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2">Съдържание<textarea className="focus-ring min-h-72 w-full rounded border border-line bg-white p-3 text-sm font-normal leading-6 outline-none" onChange={(event) => setEditing({ ...editing, content: event.target.value })} placeholder="Въведете или поставете пълния текст на документа..." value={editing.content} /></label>{error ? <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p> : null}
       </div><div className="sticky bottom-0 flex justify-end gap-2 border-t border-line bg-white px-5 py-4"><button className="focus-ring rounded border border-line px-4 py-2 text-sm font-medium hover:bg-panel" onClick={() => setEditing(null)} type="button">Отказ</button><button className="focus-ring rounded bg-action px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60" disabled={loading} type="submit">Запази документа</button></div>
+    </form></div> : null}
+
+    {editingSystem ? <div aria-modal="true" className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 sm:items-center sm:p-5" role="dialog"><form className="w-full rounded-t-lg bg-white shadow-xl sm:max-w-xl sm:rounded-lg" onSubmit={saveGeneratedSystem}>
+      <div className="flex items-center justify-between border-b border-line px-5 py-4"><div><h2 className="font-semibold text-ink">Редактиране на генерирана система</h2><p className="mt-1 text-xs text-slate-500">Променете името за сваляне и описанието на версията.</p></div><button aria-label="Затвори" className="focus-ring grid h-9 w-9 place-items-center rounded-lg hover:bg-panel" onClick={() => setEditingSystem(null)} type="button"><X className="h-5 w-5" /></button></div>
+      <div className="grid gap-4 p-5"><DocField label="Име на ZIP файла"><input onChange={(event) => setEditingSystem({ ...editingSystem, fileName: event.target.value })} placeholder="iso-система.zip" value={editingSystem.fileName ?? ""} /></DocField><label className="grid gap-1.5 text-sm font-medium text-ink">Описание *<textarea className="focus-ring min-h-28 rounded-lg border border-line bg-white p-3 text-sm font-normal leading-6 outline-none" onChange={(event) => setEditingSystem({ ...editingSystem, description: event.target.value })} required value={editingSystem.description} /></label><label><span className="mb-1.5 block text-sm font-medium text-ink">Замени ZIP файла</span><span className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border border-dashed border-line bg-panel px-4 py-3 text-sm text-slate-600 hover:border-action"><Upload className="h-5 w-5 text-action" /><span>{pendingSystemFile ? `${pendingSystemFile.name} · ${formatFileSize(pendingSystemFile.size)}` : "Изберете нов ZIP, ако искате да замените текущия"}</span><input accept=".zip,application/zip" className="sr-only" onChange={(event) => setPendingSystemFile(event.target.files?.[0] ?? null)} type="file" /></span></label>{error ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}</div>
+      <div className="flex justify-end gap-2 border-t border-line px-5 py-4"><button className="focus-ring rounded-lg border border-line px-4 py-2 text-sm font-semibold hover:bg-panel" onClick={() => setEditingSystem(null)} type="button">Отказ</button><button className="focus-ring rounded-lg bg-action px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={loading} type="submit">Запази промените</button></div>
     </form></div> : null}
   </Section>;
 }
