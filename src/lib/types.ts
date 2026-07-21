@@ -37,9 +37,12 @@ export type OrganizationCertificate = {
 export type OrganizationHistoryEntry = {
   id: string;
   organizationId: string;
-  eventType: "organization_created" | "organization_updated" | "certificate_added" | "certificate_removed" | "system_exported";
+  eventType: "organization_created" | "organization_updated" | "certificate_added" | "certificate_removed" | "system_exported" | "document_uploaded" | "document_removed";
   description: string;
   eventDate: string;
+  filePath?: string;
+  fileName?: string;
+  fileSize?: number;
 };
 
 export type IsoStandard = {
@@ -63,4 +66,8 @@ export type ImsDocument = {
   version: string;
   updatedAt: string;
   content?: string;
+  filePath?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
 };

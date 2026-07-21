@@ -96,18 +96,23 @@ export function Iso27001ExportWorkspace() {
       const anchor = document.createElement("a");
       anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove();
       URL.revokeObjectURL(url);
-      if (selectedId) await recordExportHistory();
+      if (selectedId) await recordExportHistory(blob, filename);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Генерирането не беше успешно."); }
     finally { setGenerating(false); }
   }
 
-  async function recordExportHistory() {
+  async function recordExportHistory(blob: Blob, filename: string) {
     const eventDate = new Date().toISOString();
     const description = `Генерирана е пълна ISO 27001 система, версия ${form.version}, с дата на влизане в сила ${formatDate(form.effectiveDate)}.`;
-    const entry: OrganizationHistoryEntry = { id: makeId(), organizationId: selectedId, eventType: "system_exported", description, eventDate };
+    const entry: OrganizationHistoryEntry = { id: makeId(), organizationId: selectedId, eventType: "system_exported", description, eventDate, fileName: filename, fileSize: blob.size };
     if (supabase && user) {
-      const { error } = await supabase.from("organization_history").insert({ id: entry.id, organization_id: selectedId, user_id: user.id, event_type: entry.eventType, description, event_date: eventDate });
-      if (!error) window.dispatchEvent(new CustomEvent("iso-history-added", { detail: entry }));
+      const filePath = `${selectedId}/systems/${Date.now()}-${safeFileName(filename)}`;
+      const upload = await supabase.storage.from("organization-files").upload(filePath, blob, { contentType: "application/zip", upsert: false });
+      if (upload.error) throw new Error(`ZIP файлът е изтеглен, но не беше запазен в историята: ${upload.error.message}. Изпълнете миграция 005 в Supabase.`);
+      entry.filePath = filePath;
+      const { error } = await supabase.from("organization_history").insert({ id: entry.id, organization_id: selectedId, user_id: user.id, event_type: entry.eventType, description, event_date: eventDate, file_path: filePath, file_name: filename, file_size: blob.size });
+      if (error) throw new Error(`ZIP файлът е качен, но историята не беше записана: ${error.message}`);
+      window.dispatchEvent(new CustomEvent("iso-history-added", { detail: entry }));
       return;
     }
     const key = "iso-certification-history-v1";
@@ -123,7 +128,7 @@ export function Iso27001ExportWorkspace() {
 
   return <div id="iso27001-system"><div className="mb-4"><h3 className="text-base font-semibold text-ink">ISO 27001 система</h3><p className="mt-1 text-sm text-slate-500">Генерирайте пълен комплект документация за избраната фирма с едно действие.</p></div>
     {blocked ? <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Влезте в приложението, за да генерирате защитения комплект документи.</div> : <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
-      <form className="rounded border border-line bg-white shadow-soft" onSubmit={generate}>
+      <form className="rounded-lg border border-line bg-white shadow-soft" onSubmit={generate}>
         <div className="border-b border-line px-5 py-4"><h3 className="text-sm font-semibold text-ink">Данни за организацията</h3><p className="mt-1 text-xs text-slate-500">Изберете съществуваща фирма или попълнете данните ръчно.</p></div>
         <div className="grid gap-4 p-5 sm:grid-cols-2">
           <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2">Фирма от регистъра<select className="focus-ring h-10 rounded border border-line bg-white px-3 text-sm font-normal outline-none" disabled={loading} onChange={(event) => selectOrganization(event.target.value)} value={selectedId}><option value="">Ръчно попълване</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name} · ЕИК {organization.uic}</option>)}</select></label>
@@ -152,6 +157,10 @@ export function Iso27001ExportWorkspace() {
 
 function makeId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `history-${Date.now()}`;
+}
+
+function safeFileName(value: string) {
+  return value.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(0, 140) || "iso-27001-system.zip";
 }
 
 function formatDate(value: string) {

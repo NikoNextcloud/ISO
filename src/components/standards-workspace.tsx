@@ -22,10 +22,10 @@ export function StandardsWorkspace() {
         </>;
 
         return available
-          ? <button aria-expanded={selected} className={`focus-ring w-full rounded border p-4 text-left shadow-soft transition-colors ${selected ? "border-action bg-sky-50" : "border-line bg-white hover:border-action hover:bg-sky-50/50"}`} key={standard.code} onClick={() => setIso27001Open((current) => !current)} type="button">{content}</button>
-          : <div className="rounded border border-line bg-white p-4 shadow-soft" key={standard.code}>{content}</div>;
+          ? <button aria-expanded={selected} className={`focus-ring min-h-[210px] w-full rounded-lg border p-5 text-left shadow-soft transition-all ${selected ? "border-blue-500 bg-blue-50 shadow-[0_14px_34px_rgba(37,99,235,0.12)]" : "border-line bg-white hover:border-blue-300 hover:shadow-lg"}`} key={standard.code} onClick={() => setIso27001Open((current) => !current)} type="button">{content}</button>
+          : <div className="min-h-[210px] rounded-lg border border-line bg-white p-5 shadow-soft" key={standard.code}>{content}</div>;
       })}
     </div>
-    {iso27001Open ? <div className="mt-6 border-t border-line pt-6"><Iso27001ExportWorkspace /></div> : null}
+    {iso27001Open ? <div className="mt-7 border-t border-line pt-7"><Iso27001ExportWorkspace /></div> : null}
   </Section>;
 }

@@ -8,7 +8,8 @@
 - Фирмено досие: отделна страница `/organizations/[id]` с основни данни, стандарти, сертификати, следваща сертификация, генерирани системи, документи и история.
 - Сертификати: неограничен брой сертификати към фирма, стандарт, номер, сертифициращ орган и дати.
 - История: автоматичен запис кога е добавена или редактирана фирмата, кога е добавен сертификат и кога е генерирана ISO 27001 система.
-- Документи: добавяне, редактиране, копиране, изтриване, пълен текст, версии, статуси и ISO стандарти.
+- Генерирани системи: ZIP архивът се пази в частно Supabase Storage и може да бъде изтеглен повторно от фирменото досие.
+- Документи: качване и изтегляне на реални файлове, редактиране, копиране, изтриване, пълен текст, версии, статуси и ISO стандарти.
 - Стандарти: ISO 27001 системата се отваря директно от картата на стандарта.
 - Навигация: отделни страници `/dashboard`, `/organizations`, `/standards` и `/documents` с активно оцветяване на избрания раздел.
 
@@ -38,13 +39,14 @@ npm run dev
 
 ### 1. Създаване на таблиците
 
-За нов Supabase проект изпълнете последователно `supabase/migrations/001_initial_schema.sql` и `supabase/migrations/004_certificates_history_and_cleanup.sql` в Supabase Dashboard -> SQL Editor.
+За нов Supabase проект изпълнете последователно `supabase/migrations/001_initial_schema.sql`, `supabase/migrations/004_certificates_history_and_cleanup.sql` и `supabase/migrations/005_private_file_storage.sql` в Supabase Dashboard -> SQL Editor.
 
 Ако първата миграция вече е изпълнена, изпълнете последователно:
 
 1. `supabase/migrations/002_add_organization_standards.sql`
 2. `supabase/migrations/003_add_organization_contact_fields.sql`
 3. `supabase/migrations/004_certificates_history_and_cleanup.sql`
+4. `supabase/migrations/005_private_file_storage.sql`
 
 ### 2. Единствен потребител
 

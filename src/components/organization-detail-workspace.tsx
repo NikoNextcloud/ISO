@@ -3,7 +3,7 @@
 import { cloneElement, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
-import { ArrowLeft, Award, Building2, CalendarClock, FileArchive, FileText, History, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Award, Building2, CalendarClock, Download, FileArchive, FileText, History, Loader2, Plus, Save, Trash2, Upload } from "lucide-react";
 import { StandardPills, StatusBadge } from "@/components/ui";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { DocumentStatus, ImsDocument, IsoStandardCode, Organization, OrganizationCertificate, OrganizationHistoryEntry, OrganizationStatus } from "@/lib/types";
@@ -141,6 +141,39 @@ export function OrganizationDetailWorkspace({ organizationId }: { organizationId
     }
   }
 
+  async function uploadCompanyDocument(file: File) {
+    if (!organization) return;
+    if (!supabase || !user) return setError("Качването на файлове изисква активна връзка със Supabase.");
+    if (file.size > 50 * 1024 * 1024) return setError("Файлът е по-голям от разрешените 50 MB.");
+    setSaving(true);
+    setError("");
+    const id = makeId();
+    const filePath = `${organizationId}/documents/${id}/${Date.now()}-${safeFileName(file.name)}`;
+    const upload = await supabase.storage.from("organization-files").upload(filePath, file, { contentType: file.type || "application/octet-stream", upsert: false });
+    if (upload.error) { setSaving(false); return setError(`Файлът не беше качен: ${upload.error.message}. Изпълнете миграция 005 в Supabase.`); }
+    const document: ImsDocument = { id, organizationId, title: file.name, type: "form", standards: organization.standards.length ? [...organization.standards] : ["ISO 9001"], owner: organization.manager, status: "draft", version: "1.0", updatedAt: new Date().toISOString().slice(0, 10), content: "Качен фирмен файл", filePath, fileName: file.name, fileSize: file.size, mimeType: file.type || "application/octet-stream" };
+    const result = await supabase.from("documents").insert(documentToDatabase(document)).select().single();
+    if (result.error) {
+      await supabase.storage.from("organization-files").remove([filePath]);
+      setSaving(false);
+      return setError(`Документът не беше записан: ${result.error.message}`);
+    }
+    setDocuments((current) => [documentFromDatabase(result.data), ...current]);
+    await addHistory(`Качен документ „${file.name}“ (${formatFileSize(file.size)}).`, "document_uploaded");
+    setSaving(false);
+  }
+
+  async function downloadStoredFile(filePath: string, fileName: string) {
+    if (!supabase || !user) return setError("Изтеглянето на защитени файлове изисква вход в Supabase.");
+    setError("");
+    const { data, error } = await supabase.storage.from("organization-files").download(filePath);
+    if (error) return setError(`Файлът не може да бъде изтеглен: ${error.message}`);
+    const url = URL.createObjectURL(data);
+    const anchor = document.createElement("a");
+    anchor.href = url; anchor.download = fileName; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function updateLocalOrganization(updated: Organization) {
     const all = JSON.parse(window.localStorage.getItem(ORGANIZATIONS_KEY) ?? window.localStorage.getItem(LEGACY_ORGANIZATIONS_KEY) ?? "[]") as Organization[];
     window.localStorage.setItem(ORGANIZATIONS_KEY, JSON.stringify(all.map((item) => item.id === updated.id ? updated : item)));
@@ -150,7 +183,7 @@ export function OrganizationDetailWorkspace({ organizationId }: { organizationId
   if (supabase && !user) return <Notice title="Необходим е вход" text="Влезте през страницата „Фирми“, за да отворите защитеното фирмено досие." />;
   if (!organization) return <Notice title="Фирмата не е намерена" text="Записът може да е изтрит или да нямате достъп до него." />;
 
-  return <div className="space-y-7">
+  return <div className="space-y-7 py-3">
     <div><Link className="focus-ring mb-4 inline-flex items-center gap-2 rounded text-sm font-medium text-action hover:underline" href="/organizations"><ArrowLeft className="h-4 w-4" />Всички фирми</Link><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><h2 className="text-xl font-semibold text-ink">{organization.name}</h2><p className="mt-1 text-sm text-slate-500">Фирмено досие · ЕИК {organization.uic}</p></div><StatusBadge status={organization.status} /></div></div>
 
     {error ? <p className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
@@ -166,15 +199,15 @@ export function OrganizationDetailWorkspace({ organizationId }: { organizationId
       {sortedCertificates.length ? <div className="overflow-hidden rounded border border-line bg-white shadow-soft"><div className="hidden grid-cols-12 gap-3 border-b border-line bg-panel px-4 py-3 text-xs font-semibold uppercase text-slate-500 md:grid"><span className="col-span-2">Стандарт</span><span className="col-span-2">Номер</span><span className="col-span-2">Издаден</span><span className="col-span-2">Валиден до</span><span className="col-span-3">Следваща</span><span /></div>{sortedCertificates.map((certificate) => <div className="grid gap-2 border-b border-line px-4 py-3 text-sm last:border-0 md:grid-cols-12 md:items-center md:gap-3" key={certificate.id}><span className="font-medium text-ink md:col-span-2">{certificate.standard}</span><span className="text-slate-600 md:col-span-2">№ {certificate.certificateNumber}</span><span className="text-slate-600 md:col-span-2">{formatDate(certificate.issuedAt)}</span><span className="text-slate-600 md:col-span-2">{formatDate(certificate.validUntil)}</span><span className="font-medium text-ink md:col-span-3">{formatDate(certificate.nextCertificationDate)}</span><button aria-label="Изтрий сертификата" className="focus-ring grid h-8 w-8 place-items-center justify-self-end rounded text-red-700 hover:bg-red-50" onClick={() => removeCertificate(certificate)} type="button"><Trash2 className="h-4 w-4" /></button></div>)}</div> : <Empty text="Все още няма добавени сертификати." />}
     </section>
 
-    <section className="border-t border-line pt-6"><h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-ink"><FileArchive className="h-5 w-5 text-brand" />Генерирани системи</h3>{generatedSystems.length ? <div className="divide-y divide-line overflow-hidden rounded border border-line bg-white shadow-soft">{generatedSystems.map((entry) => <div className="px-4 py-3" key={entry.id}><p className="text-sm text-ink">{entry.description}</p><p className="mt-1 text-xs text-slate-500">{formatDateTime(entry.eventDate)}</p></div>)}</div> : <Empty text="Все още няма генерирани системи за тази фирма." />}</section>
+    <section className="border-t border-line pt-6"><h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-ink"><FileArchive className="h-5 w-5 text-brand" />Генерирани системи</h3>{generatedSystems.length ? <div className="divide-y divide-line overflow-hidden rounded border border-line bg-white shadow-soft">{generatedSystems.map((entry) => <div className="flex flex-col justify-between gap-3 px-4 py-3 sm:flex-row sm:items-center" key={entry.id}><div><p className="text-sm text-ink">{entry.description}</p><p className="mt-1 text-xs text-slate-500">{formatDateTime(entry.eventDate)}{entry.fileName ? ` · ${entry.fileName} · ${formatFileSize(entry.fileSize ?? 0)}` : " · Стар запис без запазен ZIP файл"}</p></div>{entry.filePath && entry.fileName ? <button className="focus-ring inline-flex shrink-0 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm font-medium text-action hover:bg-panel" onClick={() => downloadStoredFile(entry.filePath!, entry.fileName!)} type="button"><Download className="h-4 w-4" />Изтегли ZIP</button> : null}</div>)}</div> : <Empty text="Все още няма генерирани системи за тази фирма." />}</section>
 
-    <section className="border-t border-line pt-6"><h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-ink"><FileText className="h-5 w-5 text-brand" />Документи</h3>{documents.length ? <div className="divide-y divide-line overflow-hidden rounded border border-line bg-white shadow-soft">{documents.map((document) => <div className="flex flex-col justify-between gap-2 px-4 py-3 sm:flex-row sm:items-center" key={document.id}><div><p className="text-sm font-medium text-ink">{document.title}</p><p className="mt-1 text-xs text-slate-500">Версия {document.version} · Обновен {formatDate(document.updatedAt)}</p></div><div className="flex items-center gap-2"><StandardPills standards={document.standards} /><StatusBadge status={document.status} /></div></div>)}</div> : <Empty text="Няма документи, свързани с тази фирма." />}</section>
+    <section className="border-t border-line pt-6"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h3 className="flex items-center gap-2 text-base font-semibold text-ink"><FileText className="h-5 w-5 text-brand" />Документи</h3><label className="focus-ring inline-flex cursor-pointer items-center gap-2 rounded bg-action px-3 py-2 text-sm font-medium text-white"><Upload className="h-4 w-4" />{saving ? "Качване..." : "Качи файл"}<input className="sr-only" disabled={saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadCompanyDocument(file); event.target.value = ""; }} type="file" /></label></div>{documents.length ? <div className="divide-y divide-line overflow-hidden rounded border border-line bg-white shadow-soft">{documents.map((document) => <div className="flex flex-col justify-between gap-2 px-4 py-3 sm:flex-row sm:items-center" key={document.id}><div><p className="text-sm font-medium text-ink">{document.title}</p><p className="mt-1 text-xs text-slate-500">Версия {document.version} · Обновен {formatDate(document.updatedAt)}{document.fileName ? ` · ${formatFileSize(document.fileSize ?? 0)}` : ""}</p></div><div className="flex items-center gap-2"><StandardPills standards={document.standards} /><StatusBadge status={document.status} />{document.filePath && document.fileName ? <button aria-label="Изтегли файла" className="focus-ring grid h-9 w-9 place-items-center rounded border border-line text-action hover:bg-panel" onClick={() => downloadStoredFile(document.filePath!, document.fileName!)} title="Изтегли файла" type="button"><Download className="h-4 w-4" /></button> : null}</div></div>)}</div> : <Empty text="Няма документи, свързани с тази фирма." />}</section>
 
     <section className="border-t border-line pt-6"><h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-ink"><History className="h-5 w-5 text-brand" />История на промените</h3>{sortedHistory.length ? <ol className="border-l border-line pl-5">{sortedHistory.map((entry) => <li className="relative pb-5 last:pb-0" key={entry.id}><span className="absolute -left-[25px] top-1.5 h-2 w-2 rounded-full bg-brand" /><p className="text-sm text-ink">{entry.description}</p><p className="mt-1 text-xs text-slate-500">{formatDateTime(entry.eventDate)}</p></li>)}</ol> : <Empty text="Историята ще започне при следващото записано действие." />}</section>
   </div>;
 }
 
-function Summary({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string | number }) { return <div className="rounded border border-line bg-white p-4 shadow-soft"><div className="mb-3 flex items-center justify-between"><p className="text-xs text-slate-500">{label}</p><Icon className="h-4 w-4 text-action" /></div><p className="text-lg font-semibold text-ink">{value}</p></div>; }
+function Summary({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string | number }) { return <div className="min-h-[110px] rounded-lg border border-line bg-white p-5 shadow-soft"><div className="mb-4 flex items-center justify-between"><p className="text-sm text-slate-500">{label}</p><span className="grid h-9 w-9 place-items-center rounded-lg bg-blue-50 text-action"><Icon className="h-4 w-4" /></span></div><p className="text-xl font-bold text-ink">{value}</p></div>; }
 function Data({ label, value }: { label: string; value?: string }) { return <div><dt className="text-xs font-medium uppercase text-slate-500">{label}</dt><dd className="mt-1 text-ink">{value || "Не е посочено"}</dd></div>; }
 function Empty({ text }: { text: string }) { return <div className="rounded border border-dashed border-line bg-white py-8 text-center text-sm text-slate-500">{text}</div>; }
 function Notice({ title, text }: { title: string; text: string }) { return <div className="mx-auto max-w-xl py-20 text-center"><h2 className="text-lg font-semibold text-ink">{title}</h2><p className="mt-2 text-sm text-slate-500">{text}</p><Link className="mt-5 inline-flex items-center gap-2 rounded bg-action px-4 py-2 text-sm font-medium text-white" href="/organizations"><ArrowLeft className="h-4 w-4" />Към фирмите</Link></div>; }
@@ -182,14 +215,17 @@ function Field({ label, children }: { label: string; children: React.ReactElemen
 function makeId() { return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `record-${Date.now()}`; }
 function formatDate(value: string) { return value ? new Intl.DateTimeFormat("bg-BG").format(new Date(`${value}T00:00:00`)) : "Не е зададена"; }
 function formatDateTime(value: string) { return new Intl.DateTimeFormat("bg-BG", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
+function formatFileSize(value: number) { if (!value) return "0 KB"; if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`; return `${(value / 1024 / 1024).toFixed(1)} MB`; }
+function safeFileName(value: string) { return value.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(0, 140) || "file"; }
 
 type OrganizationRow = { id: string; name: string; uic: string; address: string | null; manager: string | null; representative: string | null; contact_name: string | null; contact_phone: string | null; contact_email: string | null; employees_count: number; activity: string | null; sites_count: number; standards: IsoStandardCode[] | null; status: OrganizationStatus; readiness_percent: number; next_audit_date: string | null };
 type CertificateRow = { id: string; organization_id: string; standard: IsoStandardCode; certificate_number: string | null; certification_body: string | null; issued_at: string | null; valid_until: string | null; next_certification_date: string | null; notes: string | null; created_at: string };
-type HistoryRow = { id: string; organization_id: string; event_type: OrganizationHistoryEntry["eventType"]; description: string; event_date: string };
-type DocumentRow = { id: string; organization_id: string; title: string; document_type: ImsDocument["type"]; standards: IsoStandardCode[]; owner: string | null; status: DocumentStatus; version: string; content: { body?: string } | string | null; updated_at: string };
+type HistoryRow = { id: string; organization_id: string; event_type: OrganizationHistoryEntry["eventType"]; description: string; event_date: string; file_path: string | null; file_name: string | null; file_size: number | null };
+type DocumentRow = { id: string; organization_id: string; title: string; document_type: ImsDocument["type"]; standards: IsoStandardCode[]; owner: string | null; status: DocumentStatus; version: string; content: { body?: string } | string | null; updated_at: string; file_path: string | null; original_filename: string | null; file_size: number | null; mime_type: string | null };
 
 function organizationFromDatabase(value: OrganizationRow): Organization { return { id: value.id, name: value.name, uic: value.uic, address: value.address ?? "", manager: value.manager ?? "", representative: value.representative ?? "", contactName: value.contact_name ?? "", contactPhone: value.contact_phone ?? "", contactEmail: value.contact_email ?? "", employees: value.employees_count ?? 0, activity: value.activity ?? "", sites: value.sites_count ?? 1, standards: value.standards ?? [], status: value.status, readiness: value.readiness_percent ?? 0, nextAuditDate: value.next_audit_date ?? "" }; }
 function certificateFromDatabase(value: CertificateRow): OrganizationCertificate { return { id: value.id, organizationId: value.organization_id, standard: value.standard, certificateNumber: value.certificate_number ?? "", certificationBody: value.certification_body ?? "", issuedAt: value.issued_at ?? "", validUntil: value.valid_until ?? "", nextCertificationDate: value.next_certification_date ?? "", notes: value.notes ?? "", createdAt: value.created_at }; }
 function certificateToDatabase(value: OrganizationCertificate) { return { id: value.id, organization_id: value.organizationId, standard: value.standard, certificate_number: value.certificateNumber.trim(), certification_body: value.certificationBody.trim() || null, issued_at: value.issuedAt || null, valid_until: value.validUntil || null, next_certification_date: value.nextCertificationDate || null, notes: value.notes.trim() || null, created_at: value.createdAt }; }
-function historyFromDatabase(value: HistoryRow): OrganizationHistoryEntry { return { id: value.id, organizationId: value.organization_id, eventType: value.event_type, description: value.description, eventDate: value.event_date }; }
-function documentFromDatabase(value: DocumentRow): ImsDocument { return { id: value.id, organizationId: value.organization_id, title: value.title, type: value.document_type, standards: value.standards ?? [], owner: value.owner ?? "", status: value.status, version: value.version, updatedAt: value.updated_at.slice(0, 10), content: typeof value.content === "string" ? value.content : value.content?.body ?? "" }; }
+function historyFromDatabase(value: HistoryRow): OrganizationHistoryEntry { return { id: value.id, organizationId: value.organization_id, eventType: value.event_type, description: value.description, eventDate: value.event_date, filePath: value.file_path ?? undefined, fileName: value.file_name ?? undefined, fileSize: value.file_size ?? undefined }; }
+function documentFromDatabase(value: DocumentRow): ImsDocument { return { id: value.id, organizationId: value.organization_id, title: value.title, type: value.document_type, standards: value.standards ?? [], owner: value.owner ?? "", status: value.status, version: value.version, updatedAt: value.updated_at.slice(0, 10), content: typeof value.content === "string" ? value.content : value.content?.body ?? "", filePath: value.file_path ?? undefined, fileName: value.original_filename ?? undefined, fileSize: value.file_size ?? undefined, mimeType: value.mime_type ?? undefined }; }
+function documentToDatabase(value: ImsDocument) { return { id: value.id, organization_id: value.organizationId, title: value.title.trim(), document_type: value.type, standards: value.standards, owner: value.owner.trim() || null, status: value.status, version: value.version, content: { body: value.content ?? "" }, file_path: value.filePath ?? null, original_filename: value.fileName ?? null, file_size: value.fileSize ?? null, mime_type: value.mimeType ?? null }; }

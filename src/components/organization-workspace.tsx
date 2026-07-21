@@ -4,7 +4,7 @@ import { cloneElement, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { Award, Building2, Cloud, Edit3, FileText, FolderOpen, Gauge, History, Loader2, LogIn, LogOut, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { Award, BarChart3, Building2, Cloud, Edit3, FileText, FolderOpen, Gauge, History, Loader2, LogIn, LogOut, Plus, Save, Search, TrendingUp, Trash2, X } from "lucide-react";
 import { Section, StandardPills, StatCard, StatusBadge } from "@/components/ui";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { IsoStandardCode, Organization, OrganizationCertificate, OrganizationHistoryEntry, OrganizationStatus } from "@/lib/types";
@@ -13,6 +13,7 @@ const STORAGE_KEY = "iso-certification-organizations-v2";
 const LEGACY_STORAGE_KEY = "ims-ai-organizations-v1";
 const CERTIFICATES_STORAGE_KEY = "iso-certification-certificates-v1";
 const HISTORY_STORAGE_KEY = "iso-certification-history-v1";
+const DOCUMENTS_STORAGE_KEY = "iso-certification-documents-v1";
 const standardOptions: IsoStandardCode[] = ["ISO 9001", "ISO 14001", "ISO 45001", "ISO 27001", "ISO 50001"];
 const statusOptions: { value: OrganizationStatus; label: string }[] = [
   { value: "draft", label: "Чернова" },
@@ -44,11 +45,13 @@ function makeId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `org-${Date.now()}`;
 }
 
-export function OrganizationWorkspace({ activeDocuments, view }: { activeDocuments: number; view: "dashboard" | "organizations" }) {
+export function OrganizationWorkspace({ view }: { view: "dashboard" | "organizations" }) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [organizations, setOrganizations] = useState<Organization[]>(supabase ? [] : defaultOrganizations);
   const [certificates, setCertificates] = useState<OrganizationCertificate[]>([]);
   const [history, setHistory] = useState<OrganizationHistoryEntry[]>([]);
+  const [documentCount, setDocumentCount] = useState(0);
+  const [documentCounts, setDocumentCounts] = useState<Record<string, number>>({});
   const [storageReady, setStorageReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(!supabase);
@@ -78,6 +81,12 @@ export function OrganizationWorkspace({ activeDocuments, view }: { activeDocumen
       try { setHistory(JSON.parse(savedHistory) as OrganizationHistoryEntry[]); }
       catch { window.localStorage.removeItem(HISTORY_STORAGE_KEY); }
     }
+    try {
+      const localDocuments = JSON.parse(window.localStorage.getItem(DOCUMENTS_STORAGE_KEY) ?? "[]") as { organizationId?: string }[];
+      setDocumentCount(localDocuments.length);
+      setDocumentCounts(countByOrganization(localDocuments.map((item) => item.organizationId)));
+    }
+    catch { setDocumentCount(0); }
     setStorageReady(true);
   }, [supabase]);
 
@@ -134,15 +143,19 @@ export function OrganizationWorkspace({ activeDocuments, view }: { activeDocumen
     if (!supabase || !user) return;
     Promise.all([
       supabase.from("organization_certificates").select("*").order("created_at", { ascending: false }),
-      supabase.from("organization_history").select("*").order("event_date", { ascending: false })
-    ]).then(([certificateResult, historyResult]) => {
-      if (certificateResult.error || historyResult.error) {
-        const message = certificateResult.error?.message ?? historyResult.error?.message;
+      supabase.from("organization_history").select("*").order("event_date", { ascending: false }),
+      supabase.from("documents").select("organization_id")
+    ]).then(([certificateResult, historyResult, documentResult]) => {
+      if (certificateResult.error || historyResult.error || documentResult.error) {
+        const message = certificateResult.error?.message ?? historyResult.error?.message ?? documentResult.error?.message;
         setSyncError(`Сертификатите и историята не са заредени: ${message}. Изпълнете миграция 004 в Supabase.`);
         return;
       }
       setCertificates((certificateResult.data ?? []).map(certificateFromDatabase));
       setHistory((historyResult.data ?? []).map(historyFromDatabase));
+      const documentRows = documentResult.data ?? [];
+      setDocumentCount(documentRows.length);
+      setDocumentCounts(countByOrganization(documentRows.map((item) => item.organization_id)));
     });
   }, [supabase, user]);
 
@@ -289,11 +302,12 @@ export function OrganizationWorkspace({ activeDocuments, view }: { activeDocumen
         <StatCard icon={Building2} label="Организации" value={organizations.length} />
         <StatCard icon={Gauge} label="Средна готовност" tone="success" value={`${readinessAverage}%`} />
         <StatCard icon={Award} label="Сертификати" value={certificates.length} />
-        <StatCard icon={FileText} label="Документи за работа" value={activeDocuments} />
+        <StatCard icon={FileText} label="Качени документи" value={documentCount} />
       </div>
-      <div className="mt-5 rounded border border-line bg-white p-4 shadow-soft">
+      <div className="mt-5 grid gap-5 xl:grid-cols-2">
+      <div className="rounded-lg border border-line bg-white p-5 shadow-soft">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-ink">Готовност по организации</h3>
+          <h3 className="flex items-center gap-2 text-base font-bold text-ink"><TrendingUp className="h-5 w-5 text-teal-600" />Готовност по организации</h3>
           <div className="flex items-center gap-2">
             {supabase ? <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700"><Cloud className="h-4 w-4" />Supabase</span> : <span className="text-xs font-medium text-amber-700">Локален режим</span>}
             {supabase ? <button aria-label="Изход" className="focus-ring grid h-9 w-9 place-items-center rounded border border-line text-slate-600 hover:bg-panel" onClick={() => supabase.auth.signOut()} title="Изход" type="button"><LogOut className="h-4 w-4" /></button> : null}
@@ -302,30 +316,36 @@ export function OrganizationWorkspace({ activeDocuments, view }: { activeDocumen
         </div>
         {syncError ? <p className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{syncError}</p> : null}
         {syncing ? <p className="mb-4 inline-flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Синхронизиране със Supabase...</p> : null}
-        {organizations.length ? <div className="space-y-4">{organizations.map((organization) => <div key={organization.id}>
+        {organizations.length ? <div className="space-y-4">{[...organizations].sort((a, b) => a.readiness - b.readiness).map((organization) => <div key={organization.id}>
           <div className="mb-1 flex items-center justify-between gap-3 text-sm"><span className="font-medium text-ink">{organization.name}</span><span className="text-slate-500">{organization.readiness}%</span></div>
-          <div className="h-2 rounded bg-slate-100"><div className="h-2 rounded bg-brand" style={{ width: `${organization.readiness}%` }} /></div>
+          <div className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-blue-600" style={{ width: `${organization.readiness}%` }} /></div>
         </div>)}</div> : <p className="py-5 text-center text-sm text-slate-500">Все още няма добавени фирми.</p>}
+      </div>
+      <div className="rounded-lg border border-line bg-white p-5 shadow-soft">
+        <h3 className="mb-5 flex items-center gap-2 text-base font-bold text-ink"><BarChart3 className="h-5 w-5 text-blue-600" />Покритие по ISO стандарти</h3>
+        <div className="space-y-4">{standardOptions.map((standard) => {
+          const count = organizations.filter((organization) => organization.standards.includes(standard)).length;
+          const percentage = organizations.length ? Math.round((count / organizations.length) * 100) : 0;
+          return <div key={standard}><div className="mb-1.5 flex items-center justify-between text-sm"><span className="font-semibold text-ink">{standard}</span><span className="text-slate-500">{count} {count === 1 ? "фирма" : "фирми"}</span></div><div className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-teal-600" style={{ width: `${percentage}%` }} /></div></div>;
+        })}</div>
+      </div>
       </div>
     </Section> : null}
 
     {view === "organizations" ? <Section id="organizations" title="Фирми" description="Добавяйте, намирайте и редактирайте клиентските организации.">
-      <div className="mb-3 flex flex-col gap-3 sm:flex-row">
-        <div className="flex flex-1 items-center gap-2 rounded border border-line bg-white px-3 py-2 shadow-sm"><Search className="h-4 w-4 text-slate-400" /><input aria-label="Търсене на фирми" className="focus-ring w-full border-0 bg-transparent text-sm outline-none" onChange={(e) => setQuery(e.target.value)} placeholder="Търсене по фирма, ЕИК, дейност или стандарт" value={query} /></div>
-        <button className="focus-ring inline-flex items-center justify-center gap-2 rounded bg-action px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" onClick={openNew} type="button"><Plus className="h-4 w-4" />Добави фирма</button>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+        <div className="flex h-11 flex-1 items-center gap-2 rounded-lg border border-line bg-white px-3 shadow-sm"><Search className="h-4 w-4 text-slate-400" /><input aria-label="Търсене на фирми" className="focus-ring w-full border-0 bg-transparent text-sm outline-none" onChange={(e) => setQuery(e.target.value)} placeholder="Търсене по фирма, ЕИК, дейност или стандарт" value={query} /></div>
+        <button className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-action px-5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700" onClick={openNew} type="button"><Plus className="h-4 w-4" />Добави фирма</button>
       </div>
 
-      <div className="hidden overflow-hidden rounded border border-line bg-white shadow-soft md:block">
-        <div className="grid grid-cols-12 gap-3 border-b border-line bg-panel px-4 py-3 text-xs font-semibold uppercase text-slate-500"><span className="col-span-3">Фирма</span><span className="col-span-2">ЕИК</span><span className="col-span-3">Стандарти</span><span className="col-span-2">Следваща сертификация</span><span className="col-span-2 text-right">Действия</span></div>
-        {filtered.map((organization) => <div className="grid grid-cols-12 items-center gap-3 border-b border-line px-4 py-4 text-sm last:border-b-0" key={organization.id}>
-          <div className="col-span-3"><p className="font-medium text-ink">{organization.name}</p><p className="truncate text-xs text-slate-500">{organization.activity || "Без въведена дейност"}</p></div>
-          <span className="col-span-2 text-slate-600">{organization.uic}</span><div className="col-span-3"><StandardPills standards={organization.standards} /></div>
-          <span className="col-span-2 text-xs text-slate-600">{nextCertificationFor(organization.id, certificates)}</span>
-          <div className="col-span-2 flex justify-end gap-1"><Link aria-label={`Досие на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-600 hover:bg-panel hover:text-action" href={`/organizations/${organization.id}` as Route} title="Отвори досието"><FolderOpen className="h-4 w-4" /></Link><button aria-label={`Редактиране на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-600 hover:bg-panel hover:text-action" onClick={() => openEdit(organization)} title="Редактиране" type="button"><Edit3 className="h-4 w-4" /></button><button aria-label={`Изтриване на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-500 hover:bg-red-50 hover:text-red-700" onClick={() => removeOrganization(organization)} title="Изтриване" type="button"><Trash2 className="h-4 w-4" /></button></div>
-        </div>)}
+      <div className="hidden overflow-x-auto rounded-lg border border-line bg-white shadow-soft md:block">
+        <table className="w-full min-w-[1380px] text-left text-sm">
+          <thead className="border-b border-line bg-panel text-xs font-semibold uppercase text-slate-500"><tr><th className="px-4 py-3">Фирма</th><th className="px-4 py-3">ЕИК</th><th className="px-4 py-3">Управител / контакт</th><th className="px-4 py-3">Телефон</th><th className="px-4 py-3 text-center">Служители</th><th className="px-4 py-3">Стандарти</th><th className="px-4 py-3 text-center">Сертификати</th><th className="px-4 py-3 text-center">Документи</th><th className="px-4 py-3">Следваща сертификация</th><th className="px-4 py-3 text-right">Действия</th></tr></thead>
+          <tbody>{filtered.map((organization) => <tr className="border-b border-line last:border-0" key={organization.id}><td className="max-w-64 px-4 py-4"><p className="font-medium text-ink">{organization.name}</p><p className="truncate text-xs text-slate-500">{organization.activity || "Без въведена дейност"}</p></td><td className="whitespace-nowrap px-4 py-4 text-slate-600">{organization.uic}</td><td className="px-4 py-4"><p className="text-ink">{organization.manager || "Не е посочен"}</p><p className="text-xs text-slate-500">{organization.contactName || organization.contactEmail || "Без контакт"}</p></td><td className="whitespace-nowrap px-4 py-4 text-slate-600">{organization.contactPhone || "Не е посочен"}</td><td className="px-4 py-4 text-center text-slate-600">{organization.employees}</td><td className="px-4 py-4"><StandardPills standards={organization.standards} /></td><td className="px-4 py-4 text-center font-medium text-ink">{certificates.filter((item) => item.organizationId === organization.id).length}</td><td className="px-4 py-4 text-center font-medium text-ink">{documentCounts[organization.id] ?? 0}</td><td className="whitespace-nowrap px-4 py-4 text-slate-600">{nextCertificationFor(organization.id, certificates)}</td><td className="px-4 py-4"><div className="flex justify-end gap-1"><Link aria-label={`Досие на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-600 hover:bg-panel hover:text-action" href={`/organizations/${organization.id}` as Route} title="Отвори досието"><FolderOpen className="h-4 w-4" /></Link><button aria-label={`Редактиране на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-600 hover:bg-panel hover:text-action" onClick={() => openEdit(organization)} title="Редактиране" type="button"><Edit3 className="h-4 w-4" /></button><button aria-label={`Изтриване на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-500 hover:bg-red-50 hover:text-red-700" onClick={() => removeOrganization(organization)} title="Изтриване" type="button"><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody>
+        </table>
       </div>
 
-      <div className="grid gap-3 md:hidden">{filtered.map((organization) => <div className="rounded border border-line bg-white p-4 shadow-soft" key={organization.id}>
+      <div className="grid gap-3 md:hidden">{filtered.map((organization) => <div className="rounded-lg border border-line bg-white p-4 shadow-soft" key={organization.id}>
         <div className="flex items-start justify-between gap-3"><div><p className="font-medium text-ink">{organization.name}</p><p className="text-xs text-slate-500">ЕИК {organization.uic}</p></div><StatusBadge status={organization.status} /></div>
         <p className="mt-3 text-sm text-slate-600">{organization.activity || "Без въведена дейност"}</p><div className="mt-3"><StandardPills standards={organization.standards} /></div>
         <div className="mt-4 flex gap-2"><Link className="focus-ring inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm" href={`/organizations/${organization.id}` as Route}><FolderOpen className="h-4 w-4" />Досие</Link><button className="focus-ring inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm" onClick={() => openEdit(organization)} type="button"><Edit3 className="h-4 w-4" />Редактирай</button><button aria-label="Изтриване" className="focus-ring grid h-10 w-10 place-items-center rounded border border-line text-red-700" onClick={() => removeOrganization(organization)} type="button"><Trash2 className="h-4 w-4" /></button></div>
@@ -532,6 +552,13 @@ function certificateStatus(validUntil: string) {
   if (!validUntil) return { label: "Без срок", tone: "text-slate-500" };
   const expired = new Date(`${validUntil}T23:59:59`) < new Date();
   return expired ? { label: "Изтекъл", tone: "text-red-700" } : { label: "Активен", tone: "text-emerald-700" };
+}
+
+function countByOrganization(ids: Array<string | undefined>) {
+  return ids.reduce<Record<string, number>>((counts, id) => {
+    if (id) counts[id] = (counts[id] ?? 0) + 1;
+    return counts;
+  }, {});
 }
 
 function LoadingState() {
