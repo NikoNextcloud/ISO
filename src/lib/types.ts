@@ -21,6 +21,27 @@ export type Organization = {
   nextAuditDate: string;
 };
 
+export type OrganizationCertificate = {
+  id: string;
+  organizationId: string;
+  standard: IsoStandardCode;
+  certificateNumber: string;
+  certificationBody: string;
+  issuedAt: string;
+  validUntil: string;
+  nextCertificationDate: string;
+  notes: string;
+  createdAt: string;
+};
+
+export type OrganizationHistoryEntry = {
+  id: string;
+  organizationId: string;
+  eventType: "organization_created" | "organization_updated" | "certificate_added" | "certificate_removed" | "system_exported";
+  description: string;
+  eventDate: string;
+};
+
 export type IsoStandard = {
   code: IsoStandardCode;
   title: string;
@@ -42,30 +63,4 @@ export type ImsDocument = {
   version: string;
   updatedAt: string;
   content?: string;
-};
-
-export type Template = {
-  id: string;
-  title: string;
-  type: ImsDocument["type"];
-  standards: IsoStandardCode[];
-  placeholders: string[];
-};
-
-export type TaskStatus = "open" | "in_progress" | "overdue" | "done";
-
-export type ImsTask = {
-  id: string;
-  organizationId: string;
-  title: string;
-  dueDate: string;
-  status: TaskStatus;
-  owner: string;
-  relatedStandard?: IsoStandardCode;
-};
-
-export type AiDraftRequest = {
-  organizationId: string;
-  prompt: string;
-  standards: IsoStandardCode[];
 };

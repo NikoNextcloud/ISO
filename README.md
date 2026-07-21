@@ -5,13 +5,15 @@
 ## Работещи модули
 
 - Фирми: добавяне, редактиране, изтриване, търсене и Supabase синхронизация.
+- Сертификати: неограничен брой сертификати към фирма, стандарт, номер, сертифициращ орган и дати.
+- История: автоматичен запис кога е добавена или редактирана фирмата, кога е добавен сертификат и кога е генерирана ISO 27001 система.
 - Документи: добавяне, редактиране, копиране, изтриване, пълен текст, версии, статуси и ISO стандарти.
-- ISO 27001 система: избор на фирма, еднократно въвеждане на данните и генериране на цялата папкова структура като ZIP.
+- Стандарти: ISO 27001 системата се отваря директно от картата на стандарта.
 - Навигация: активно оцветяване на избрания раздел и автоматична смяна при скролиране.
 
 ## ISO 27001 генератор
 
-Разделът `ISO 27001 система` използва документите в `templates/iso27001`. Изберете съществуваща фирма или въведете данните ръчно, попълнете обхвата и натиснете `Генерирай ZIP система`.
+Кликнете върху картата `ISO 27001` в раздел `Стандарти`. Изберете съществуваща фирма или въведете данните ръчно, попълнете обхвата и натиснете `Генерирай ZIP система`.
 
 Генерираният архив съдържа:
 
@@ -35,12 +37,13 @@ npm run dev
 
 ### 1. Създаване на таблиците
 
-За нов Supabase проект изпълнете `supabase/migrations/001_initial_schema.sql` в Supabase Dashboard -> SQL Editor.
+За нов Supabase проект изпълнете последователно `supabase/migrations/001_initial_schema.sql` и `supabase/migrations/004_certificates_history_and_cleanup.sql` в Supabase Dashboard -> SQL Editor.
 
 Ако първата миграция вече е изпълнена, изпълнете последователно:
 
 1. `supabase/migrations/002_add_organization_standards.sql`
 2. `supabase/migrations/003_add_organization_contact_fields.sql`
+3. `supabase/migrations/004_certificates_history_and_cleanup.sql`
 
 ### 2. Единствен потребител
 
@@ -53,7 +56,6 @@ npm run dev
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
-AI_PROVIDER=mock
 ```
 
 Стойностите са в Supabase Dashboard -> Project Settings -> API. Не поставяйте `service_role` ключ във frontend настройките.
@@ -64,7 +66,6 @@ AI_PROVIDER=mock
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `AI_PROVIDER` със стойност `mock`
 
 Направете нов deployment. Шаблоните за ISO 27001 се включват автоматично във Vercel build-а.
 
@@ -77,7 +78,3 @@ AI_PROVIDER=mock
 5. Редактирайте фирмата в приложението и обновете таблицата в Supabase.
 
 Зеленият надпис `Supabase` в таблото означава, че конфигурацията е открита. `Локален режим` означава, че липсва URL или anon key.
-
-## AI слой
-
-Приложението има endpoint `POST /api/ai/draft`. При `AI_PROVIDER=mock` той връща демонстрационен структуриран отговор и може по-късно да бъде свързан с избран AI доставчик.

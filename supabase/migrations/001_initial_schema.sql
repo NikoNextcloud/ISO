@@ -33,13 +33,6 @@ create type public.document_type as enum (
   'form'
 );
 
-create type public.task_status as enum (
-  'open',
-  'in_progress',
-  'overdue',
-  'done'
-);
-
 create table public.organizations (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid references auth.users(id) on delete set null,
@@ -93,23 +86,9 @@ create table public.processes (
   updated_at timestamptz not null default now()
 );
 
-create table public.document_templates (
-  id uuid primary key default gen_random_uuid(),
-  title text not null,
-  document_type public.document_type not null,
-  standards public.iso_standard_code[] not null default '{}',
-  placeholders jsonb not null default '[]'::jsonb,
-  body text,
-  version text not null default '1.0',
-  active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
 create table public.documents (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
-  template_id uuid references public.document_templates(id) on delete set null,
   title text not null,
   document_type public.document_type not null,
   standards public.iso_standard_code[] not null default '{}',
@@ -122,33 +101,6 @@ create table public.documents (
   approved_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
-);
-
-create table public.tasks (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references public.organizations(id) on delete cascade,
-  document_id uuid references public.documents(id) on delete set null,
-  title text not null,
-  description text,
-  due_date date,
-  owner text,
-  status public.task_status not null default 'open',
-  related_standard public.iso_standard_code,
-  reminder_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table public.ai_requests (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid references public.organizations(id) on delete cascade,
-  user_id uuid references auth.users(id) on delete set null,
-  provider text not null default 'mock',
-  prompt text not null,
-  standards public.iso_standard_code[] not null default '{}',
-  response jsonb,
-  created_document_id uuid references public.documents(id) on delete set null,
-  created_at timestamptz not null default now()
 );
 
 create table public.audit_log (
@@ -167,9 +119,6 @@ create index organizations_owner_id_idx on public.organizations(owner_id);
 create index organizations_uic_idx on public.organizations(uic);
 create index documents_organization_id_idx on public.documents(organization_id);
 create index documents_standards_idx on public.documents using gin (standards);
-create index tasks_organization_id_idx on public.tasks(organization_id);
-create index tasks_due_date_idx on public.tasks(due_date);
-create index ai_requests_organization_id_idx on public.ai_requests(organization_id);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -189,35 +138,20 @@ create trigger processes_set_updated_at
 before update on public.processes
 for each row execute function public.set_updated_at();
 
-create trigger document_templates_set_updated_at
-before update on public.document_templates
-for each row execute function public.set_updated_at();
-
 create trigger documents_set_updated_at
 before update on public.documents
-for each row execute function public.set_updated_at();
-
-create trigger tasks_set_updated_at
-before update on public.tasks
 for each row execute function public.set_updated_at();
 
 alter table public.organizations enable row level security;
 alter table public.organization_standards enable row level security;
 alter table public.processes enable row level security;
-alter table public.document_templates enable row level security;
 alter table public.documents enable row level security;
-alter table public.tasks enable row level security;
-alter table public.ai_requests enable row level security;
 alter table public.audit_log enable row level security;
 
 create policy "Users can manage owned organizations"
 on public.organizations for all
 using (owner_id = auth.uid())
 with check (owner_id = auth.uid());
-
-create policy "Users can read active templates"
-on public.document_templates for select
-using (active = true);
 
 create policy "Users can manage organization standards for owned organizations"
 on public.organization_standards for all
@@ -270,42 +204,6 @@ with check (
   )
 );
 
-create policy "Users can manage tasks for owned organizations"
-on public.tasks for all
-using (
-  exists (
-    select 1 from public.organizations
-    where organizations.id = tasks.organization_id
-      and organizations.owner_id = auth.uid()
-  )
-)
-with check (
-  exists (
-    select 1 from public.organizations
-    where organizations.id = tasks.organization_id
-      and organizations.owner_id = auth.uid()
-  )
-);
-
-create policy "Users can manage AI requests for owned organizations"
-on public.ai_requests for all
-using (
-  user_id = auth.uid()
-  or exists (
-    select 1 from public.organizations
-    where organizations.id = ai_requests.organization_id
-      and organizations.owner_id = auth.uid()
-  )
-)
-with check (
-  user_id = auth.uid()
-  or exists (
-    select 1 from public.organizations
-    where organizations.id = ai_requests.organization_id
-      and organizations.owner_id = auth.uid()
-  )
-);
-
 create policy "Users can read audit log for owned organizations"
 on public.audit_log for select
 using (
@@ -323,26 +221,3 @@ insert into public.standards (code, title, description) values
   ('ISO 27001', 'Information security management system', 'Assets, risk treatment, Statement of Applicability and security controls.'),
   ('ISO 50001', 'Energy management system', 'Energy review, baselines, EnPI, objectives and monitoring.')
 on conflict (code) do nothing;
-
-insert into public.document_templates (title, document_type, standards, placeholders, body) values
-  (
-    'Интегрирана политика',
-    'policy',
-    array['ISO 9001','ISO 14001','ISO 45001','ISO 27001','ISO 50001']::public.iso_standard_code[],
-    '["company_name","scope","standards","manager","approval_date"]'::jsonb,
-    'Шаблон за интегрирана политика на системата за управление.'
-  ),
-  (
-    'Контекст на организацията',
-    'report',
-    array['ISO 9001','ISO 14001','ISO 45001','ISO 27001','ISO 50001']::public.iso_standard_code[],
-    '["activity","internal_issues","external_issues","interested_parties"]'::jsonb,
-    'Шаблон за анализ на контекст, заинтересовани страни и обхват.'
-  ),
-  (
-    'Оценка на риска',
-    'matrix',
-    array['ISO 9001','ISO 45001','ISO 27001','ISO 50001']::public.iso_standard_code[],
-    '["process","hazards","threats","controls","risk_level","actions"]'::jsonb,
-    'Шаблон за оценка на риск и план за мерки.'
-  );

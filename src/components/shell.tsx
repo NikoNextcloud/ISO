@@ -1,17 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, Bot, Building2, ClipboardCheck, FileArchive, FileText, Gauge, LayoutTemplate, ShieldCheck } from "lucide-react";
+import { Building2, FileText, Gauge, ShieldCheck } from "lucide-react";
 
 const navItems = [
   { id: "dashboard", label: "Табло", icon: Gauge },
   { id: "organizations", label: "Фирми", icon: Building2 },
   { id: "standards", label: "Стандарти", icon: ShieldCheck },
-  { id: "documents", label: "Документи", icon: FileText },
-  { id: "iso27001-system", label: "ISO 27001 система", icon: FileArchive },
-  { id: "templates", label: "Шаблони", icon: LayoutTemplate },
-  { id: "tasks", label: "Задачи", icon: ClipboardCheck },
-  { id: "assistant", label: "AI асистент", icon: Bot }
+  { id: "documents", label: "Документи", icon: FileText }
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -39,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="space-y-1">{nav()}</nav>
     </aside>
     <main className="lg:pl-64">
-      <header className="sticky top-0 z-40 border-b border-line bg-white/95 backdrop-blur"><div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-5"><div><h1 className="text-lg font-semibold text-ink">ISO сертифициране</h1><p className="hidden text-sm text-slate-500 sm:block">Фирми, документи, задачи и AI генериране в един работен поток</p></div><button aria-label="Напомняния" className="focus-ring inline-flex h-10 w-10 items-center justify-center rounded border border-line bg-white text-slate-700 shadow-sm hover:bg-panel" title="Напомняния"><Bell className="h-4 w-4" /></button></div><nav className="flex gap-1 overflow-x-auto border-t border-line px-3 py-2 lg:hidden">{nav(true)}</nav></header>
+      <header className="sticky top-0 z-40 border-b border-line bg-white/95 backdrop-blur"><div className="mx-auto max-w-7xl px-4 py-3 sm:px-5"><h1 className="text-lg font-semibold text-ink">ISO сертифициране</h1><p className="hidden text-sm text-slate-500 sm:block">Фирми, сертификати, история и документация в един работен процес</p></div><nav className="flex gap-1 overflow-x-auto border-t border-line px-3 py-2 lg:hidden">{nav(true)}</nav></header>
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-5">{children}</div>
     </main>
   </div>;

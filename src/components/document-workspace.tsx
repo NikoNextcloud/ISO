@@ -8,7 +8,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { DocumentStatus, ImsDocument, IsoStandardCode, Organization } from "@/lib/types";
 
 const DOCUMENTS_KEY = "iso-certification-documents-v1";
-const ORGANIZATIONS_KEY = "ims-ai-organizations-v1";
+const ORGANIZATIONS_KEY = "iso-certification-organizations-v2";
+const LEGACY_ORGANIZATIONS_KEY = "ims-ai-organizations-v1";
 const standardOptions: IsoStandardCode[] = ["ISO 9001", "ISO 14001", "ISO 45001", "ISO 27001", "ISO 50001"];
 const typeOptions: { value: ImsDocument["type"]; label: string }[] = [
   { value: "policy", label: "Политика" }, { value: "procedure", label: "Процедура" },
@@ -46,7 +47,7 @@ export function DocumentWorkspace() {
   useEffect(() => {
     if (supabase) return;
     const savedDocuments = window.localStorage.getItem(DOCUMENTS_KEY);
-    const savedOrganizations = window.localStorage.getItem(ORGANIZATIONS_KEY);
+    const savedOrganizations = window.localStorage.getItem(ORGANIZATIONS_KEY) ?? window.localStorage.getItem(LEGACY_ORGANIZATIONS_KEY);
     if (savedDocuments) try { setDocuments(JSON.parse(savedDocuments) as ImsDocument[]); } catch { window.localStorage.removeItem(DOCUMENTS_KEY); }
     if (savedOrganizations) try { setOrganizations((JSON.parse(savedOrganizations) as Organization[]).map(({ id, name }) => ({ id, name }))); } catch { /* Keep demo organizations. */ }
   }, [supabase]);

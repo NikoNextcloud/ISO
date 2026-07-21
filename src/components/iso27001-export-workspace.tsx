@@ -3,9 +3,8 @@
 import { cloneElement, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { Archive, Download, FileArchive, FolderTree, Loader2, ShieldCheck } from "lucide-react";
-import { Section } from "@/components/ui";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
-import type { Organization } from "@/lib/types";
+import type { Organization, OrganizationHistoryEntry } from "@/lib/types";
 
 type ExportForm = {
   companyName: string; uic: string; address: string; manager: string; representative: string;
@@ -37,11 +36,11 @@ export function Iso27001ExportWorkspace() {
 
   useEffect(() => {
     if (supabase) return;
-    const saved = window.localStorage.getItem("ims-ai-organizations-v1");
+    const saved = window.localStorage.getItem("iso-certification-organizations-v2") ?? window.localStorage.getItem("ims-ai-organizations-v1");
     if (!saved) return;
     try {
       const local = JSON.parse(saved) as Organization[];
-      setOrganizations(local.map((item) => ({ id: item.id, name: item.name, uic: item.uic, address: item.address, manager: item.manager, representative: item.manager, contact_name: item.manager, contact_phone: "", contact_email: item.contactEmail, employees_count: item.employees, activity: item.activity })));
+      setOrganizations(local.map((item) => ({ id: item.id, name: item.name, uic: item.uic, address: item.address, manager: item.manager, representative: item.representative ?? item.manager, contact_name: item.contactName ?? "", contact_phone: item.contactPhone ?? "", contact_email: item.contactEmail, employees_count: item.employees, activity: item.activity })));
     } catch { /* The export form can still be filled manually. */ }
   }, [supabase]);
 
@@ -97,13 +96,32 @@ export function Iso27001ExportWorkspace() {
       const anchor = document.createElement("a");
       anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove();
       URL.revokeObjectURL(url);
+      if (selectedId) await recordExportHistory();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Генерирането не беше успешно."); }
     finally { setGenerating(false); }
   }
 
+  async function recordExportHistory() {
+    const eventDate = new Date().toISOString();
+    const description = `Генерирана е пълна ISO 27001 система, версия ${form.version}, с дата на влизане в сила ${formatDate(form.effectiveDate)}.`;
+    const entry: OrganizationHistoryEntry = { id: makeId(), organizationId: selectedId, eventType: "system_exported", description, eventDate };
+    if (supabase && user) {
+      const { error } = await supabase.from("organization_history").insert({ id: entry.id, organization_id: selectedId, user_id: user.id, event_type: entry.eventType, description, event_date: eventDate });
+      if (!error) window.dispatchEvent(new CustomEvent("iso-history-added", { detail: entry }));
+      return;
+    }
+    const key = "iso-certification-history-v1";
+    try {
+      const current = JSON.parse(window.localStorage.getItem(key) ?? "[]") as OrganizationHistoryEntry[];
+      current.unshift(entry);
+      window.localStorage.setItem(key, JSON.stringify(current));
+      window.dispatchEvent(new CustomEvent("iso-history-added", { detail: entry }));
+    } catch { /* The ZIP was generated successfully even if local history is unavailable. */ }
+  }
+
   const blocked = Boolean(supabase && authChecked && !user);
 
-  return <Section id="iso27001-system" title="ISO 27001 система" description="Генерирайте пълен комплект документация за избраната фирма с едно действие.">
+  return <div id="iso27001-system"><div className="mb-4"><h3 className="text-base font-semibold text-ink">ISO 27001 система</h3><p className="mt-1 text-sm text-slate-500">Генерирайте пълен комплект документация за избраната фирма с едно действие.</p></div>
     {blocked ? <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Влезте в приложението, за да генерирате защитения комплект документи.</div> : <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
       <form className="rounded border border-line bg-white shadow-soft" onSubmit={generate}>
         <div className="border-b border-line px-5 py-4"><h3 className="text-sm font-semibold text-ink">Данни за организацията</h3><p className="mt-1 text-xs text-slate-500">Изберете съществуваща фирма или попълнете данните ръчно.</p></div>
@@ -129,7 +147,15 @@ export function Iso27001ExportWorkspace() {
 
       <aside className="h-fit rounded border border-line bg-white p-4 shadow-soft"><div className="mb-4 flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded bg-sky-50 text-action"><FileArchive className="h-4 w-4" /></span><div><h3 className="text-sm font-semibold text-ink">Комплект ISO 27001</h3><p className="text-xs text-slate-500">ISO/IEC 27001:2022</p></div></div><div className="space-y-3 text-sm text-slate-600"><p className="flex items-center gap-2"><FolderTree className="h-4 w-4 text-slate-400" />Оригинална папкова структура</p><p className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-slate-400" />Наръчник и 12 приложения</p><p className="flex items-center gap-2"><Archive className="h-4 w-4 text-slate-400" />Политики, процедури и записи</p></div><div className="mt-4 border-t border-line pt-4"><p className="text-2xl font-semibold text-ink">84</p><p className="text-xs text-slate-500">файла в един ZIP архив</p></div><p className="mt-4 text-xs leading-5 text-slate-500">Архивът се записва в папката за изтегляния на браузъра. Старият `.doc` файл с организационната схема се включва непроменен.</p></aside>
     </div>}
-  </Section>;
+  </div>;
+}
+
+function makeId() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `history-${Date.now()}`;
+}
+
+function formatDate(value: string) {
+  return value ? new Intl.DateTimeFormat("bg-BG").format(new Date(`${value}T00:00:00`)) : "не е зададена";
 }
 
 function ExportField({ label, children }: { label: string; children: React.ReactElement<{ className?: string }> }) {

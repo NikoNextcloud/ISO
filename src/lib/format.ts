@@ -1,6 +1,6 @@
-import type { DocumentStatus, OrganizationStatus, TaskStatus } from "./types";
+import type { DocumentStatus, OrganizationStatus } from "./types";
 
-export function statusLabel(status: OrganizationStatus | DocumentStatus | TaskStatus) {
+export function statusLabel(status: OrganizationStatus | DocumentStatus) {
   const labels: Record<string, string> = {
     draft: "Чернова",
     implementation: "Внедряване",
@@ -9,17 +9,13 @@ export function statusLabel(status: OrganizationStatus | DocumentStatus | TaskSt
     attention: "Внимание",
     review: "Преглед",
     approved: "Одобрен",
-    needs_update: "За актуализация",
-    open: "Отворена",
-    in_progress: "В процес",
-    overdue: "Просрочена",
-    done: "Готова"
+    needs_update: "За актуализация"
   };
   return labels[status] ?? status;
 }
 
-export function statusClass(status: OrganizationStatus | DocumentStatus | TaskStatus) {
-  if (status === "approved" || status === "ready" || status === "certified" || status === "done") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (status === "attention" || status === "needs_update" || status === "overdue") return "bg-amber-50 text-amber-800 border-amber-200";
+export function statusClass(status: OrganizationStatus | DocumentStatus) {
+  if (status === "approved" || status === "ready" || status === "certified") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (status === "attention" || status === "needs_update") return "bg-amber-50 text-amber-800 border-amber-200";
   return "bg-sky-50 text-sky-700 border-sky-200";
 }

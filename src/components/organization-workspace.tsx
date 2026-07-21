@@ -2,12 +2,15 @@
 
 import { cloneElement, useEffect, useMemo, useState } from "react";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { Building2, CalendarClock, Cloud, Edit3, FileText, Gauge, Loader2, LogIn, LogOut, Plus, Search, Trash2, X } from "lucide-react";
+import { Award, Building2, Cloud, Edit3, FileText, FolderOpen, Gauge, History, Loader2, LogIn, LogOut, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { Section, StandardPills, StatCard, StatusBadge } from "@/components/ui";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
-import type { IsoStandardCode, Organization, OrganizationStatus } from "@/lib/types";
+import type { IsoStandardCode, Organization, OrganizationCertificate, OrganizationHistoryEntry, OrganizationStatus } from "@/lib/types";
 
-const STORAGE_KEY = "ims-ai-organizations-v1";
+const STORAGE_KEY = "iso-certification-organizations-v2";
+const LEGACY_STORAGE_KEY = "ims-ai-organizations-v1";
+const CERTIFICATES_STORAGE_KEY = "iso-certification-certificates-v1";
+const HISTORY_STORAGE_KEY = "iso-certification-history-v1";
 const standardOptions: IsoStandardCode[] = ["ISO 9001", "ISO 14001", "ISO 45001", "ISO 27001", "ISO 50001"];
 const statusOptions: { value: OrganizationStatus; label: string }[] = [
   { value: "draft", label: "Чернова" },
@@ -25,13 +28,25 @@ const defaultOrganizations: Organization[] = [
 
 const emptyOrganization: Organization = { id: "", name: "", uic: "", address: "", manager: "", representative: "", contactName: "", contactPhone: "", contactEmail: "", employees: 0, activity: "", sites: 1, standards: ["ISO 9001"], status: "draft", readiness: 0, nextAuditDate: "" };
 
+const emptyCertificate: Omit<OrganizationCertificate, "id" | "organizationId" | "createdAt"> = {
+  standard: "ISO 9001",
+  certificateNumber: "",
+  certificationBody: "",
+  issuedAt: "",
+  validUntil: "",
+  nextCertificationDate: "",
+  notes: ""
+};
+
 function makeId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `org-${Date.now()}`;
 }
 
-export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activeDocuments: number; overdueTasks: number }) {
+export function OrganizationWorkspace({ activeDocuments }: { activeDocuments: number }) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [organizations, setOrganizations] = useState<Organization[]>(supabase ? [] : defaultOrganizations);
+  const [certificates, setCertificates] = useState<OrganizationCertificate[]>([]);
+  const [history, setHistory] = useState<OrganizationHistoryEntry[]>([]);
   const [storageReady, setStorageReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(!supabase);
@@ -39,14 +54,27 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
   const [syncError, setSyncError] = useState("");
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Organization | null>(null);
+  const [dossierId, setDossierId] = useState("");
+  const [certificateDraft, setCertificateDraft] = useState({ ...emptyCertificate });
+  const [showCertificateForm, setShowCertificateForm] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (supabase) return;
-    const saved = window.localStorage.getItem(STORAGE_KEY);
+    const saved = window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (saved) {
       try { setOrganizations(JSON.parse(saved) as Organization[]); }
       catch { window.localStorage.removeItem(STORAGE_KEY); }
+    }
+    const savedCertificates = window.localStorage.getItem(CERTIFICATES_STORAGE_KEY);
+    const savedHistory = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (savedCertificates) {
+      try { setCertificates(JSON.parse(savedCertificates) as OrganizationCertificate[]); }
+      catch { window.localStorage.removeItem(CERTIFICATES_STORAGE_KEY); }
+    }
+    if (savedHistory) {
+      try { setHistory(JSON.parse(savedHistory) as OrganizationHistoryEntry[]); }
+      catch { window.localStorage.removeItem(HISTORY_STORAGE_KEY); }
     }
     setStorageReady(true);
   }, [supabase]);
@@ -54,6 +82,24 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
   useEffect(() => {
     if (!supabase && storageReady) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(organizations));
   }, [organizations, storageReady, supabase]);
+
+  useEffect(() => {
+    if (!supabase && storageReady) window.localStorage.setItem(CERTIFICATES_STORAGE_KEY, JSON.stringify(certificates));
+  }, [certificates, storageReady, supabase]);
+
+  useEffect(() => {
+    if (!supabase && storageReady) window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+  }, [history, storageReady, supabase]);
+
+  useEffect(() => {
+    const receiveHistory = (event: Event) => {
+      const entry = (event as CustomEvent<OrganizationHistoryEntry>).detail;
+      if (!entry) return;
+      setHistory((current) => current.some((item) => item.id === entry.id) ? current : [entry, ...current]);
+    };
+    window.addEventListener("iso-history-added", receiveHistory);
+    return () => window.removeEventListener("iso-history-added", receiveHistory);
+  }, []);
 
   useEffect(() => {
     if (!supabase) return;
@@ -82,6 +128,22 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
     return () => { active = false; };
   }, [supabase, user]);
 
+  useEffect(() => {
+    if (!supabase || !user) return;
+    Promise.all([
+      supabase.from("organization_certificates").select("*").order("created_at", { ascending: false }),
+      supabase.from("organization_history").select("*").order("event_date", { ascending: false })
+    ]).then(([certificateResult, historyResult]) => {
+      if (certificateResult.error || historyResult.error) {
+        const message = certificateResult.error?.message ?? historyResult.error?.message;
+        setSyncError(`Сертификатите и историята не са заредени: ${message}. Изпълнете миграция 004 в Supabase.`);
+        return;
+      }
+      setCertificates((certificateResult.data ?? []).map(certificateFromDatabase));
+      setHistory((historyResult.data ?? []).map(historyFromDatabase));
+    });
+  }, [supabase, user]);
+
   const filtered = useMemo(() => {
     const value = query.trim().toLocaleLowerCase("bg");
     if (!value) return organizations;
@@ -92,6 +154,9 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
   }, [organizations, query]);
 
   const readinessAverage = organizations.length ? Math.round(organizations.reduce((sum, item) => sum + item.readiness, 0) / organizations.length) : 0;
+  const dossier = organizations.find((item) => item.id === dossierId) ?? null;
+  const dossierCertificates = certificates.filter((item) => item.organizationId === dossierId).sort((a, b) => (a.nextCertificationDate || "9999").localeCompare(b.nextCertificationDate || "9999"));
+  const dossierHistory = history.filter((item) => item.organizationId === dossierId).sort((a, b) => b.eventDate.localeCompare(a.eventDate));
 
   function openNew() {
     setError("");
@@ -101,6 +166,34 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
   function openEdit(organization: Organization) {
     setError("");
     setEditing({ ...organization, standards: [...organization.standards] });
+  }
+
+  function openDossier(organization: Organization) {
+    setDossierId(organization.id);
+    setCertificateDraft({ ...emptyCertificate, standard: organization.standards[0] ?? "ISO 9001" });
+    setShowCertificateForm(false);
+    setError("");
+  }
+
+  async function recordHistory(organizationId: string, eventType: OrganizationHistoryEntry["eventType"], description: string) {
+    const entry: OrganizationHistoryEntry = { id: makeId(), organizationId, eventType, description, eventDate: new Date().toISOString() };
+    if (supabase && user) {
+      const { data, error } = await supabase.from("organization_history").insert({
+        id: entry.id,
+        organization_id: organizationId,
+        user_id: user.id,
+        event_type: eventType,
+        description,
+        event_date: entry.eventDate
+      }).select().single();
+      if (error) {
+        setSyncError(`Историята не беше записана: ${error.message}`);
+        return;
+      }
+      setHistory((current) => [historyFromDatabase(data), ...current]);
+      return;
+    }
+    setHistory((current) => [entry, ...current]);
   }
 
   async function saveOrganization(event: React.FormEvent<HTMLFormElement>) {
@@ -123,11 +216,54 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
       }
       const saved = fromDatabase(result.data);
       setOrganizations((current) => exists ? current.map((item) => item.id === saved.id ? saved : item) : [saved, ...current]);
+      await recordHistory(saved.id, exists ? "organization_updated" : "organization_created", exists ? `Данните на фирмата са редактирани. Избрани стандарти: ${saved.standards.join(", ")}.` : `Фирмата е добавена. Избрани стандарти: ${saved.standards.join(", ")}.`);
       setEditing(null);
       return;
     }
     setOrganizations((current) => exists ? current.map((item) => item.id === editing.id ? editing : item) : [editing, ...current]);
+    await recordHistory(editing.id, exists ? "organization_updated" : "organization_created", exists ? `Данните на фирмата са редактирани. Избрани стандарти: ${editing.standards.join(", ")}.` : `Фирмата е добавена. Избрани стандарти: ${editing.standards.join(", ")}.`);
     setEditing(null);
+  }
+
+  async function addCertificate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!dossier) return;
+    if (!certificateDraft.certificateNumber.trim()) return setError("Въведете номер на сертификата.");
+    const certificate: OrganizationCertificate = {
+      ...certificateDraft,
+      id: makeId(),
+      organizationId: dossier.id,
+      createdAt: new Date().toISOString()
+    };
+    if (supabase && user) {
+      setSyncing(true);
+      const { data, error } = await supabase.from("organization_certificates").insert(certificateToDatabase(certificate)).select().single();
+      setSyncing(false);
+      if (error) return setError(`Сертификатът не беше записан: ${error.message}`);
+      setCertificates((current) => [certificateFromDatabase(data), ...current]);
+    } else {
+      setCertificates((current) => [certificate, ...current]);
+    }
+
+    if (!dossier.standards.includes(certificate.standard)) {
+      const standards = [...dossier.standards, certificate.standard];
+      setOrganizations((current) => current.map((item) => item.id === dossier.id ? { ...item, standards } : item));
+      if (supabase && user) await supabase.from("organizations").update({ standards }).eq("id", dossier.id);
+    }
+    await recordHistory(dossier.id, "certificate_added", `Добавен сертификат ${certificate.standard}, № ${certificate.certificateNumber}. Следваща сертификация: ${formatDate(certificate.nextCertificationDate)}.`);
+    setCertificateDraft({ ...emptyCertificate, standard: dossier.standards[0] ?? certificate.standard });
+    setShowCertificateForm(false);
+    setError("");
+  }
+
+  async function removeCertificate(certificate: OrganizationCertificate) {
+    if (!window.confirm(`Да бъде ли изтрит сертификат ${certificate.standard} № ${certificate.certificateNumber}?`)) return;
+    if (supabase && user) {
+      const { error } = await supabase.from("organization_certificates").delete().eq("id", certificate.id);
+      if (error) return setSyncError(`Сертификатът не беше изтрит: ${error.message}`);
+    }
+    setCertificates((current) => current.filter((item) => item.id !== certificate.id));
+    await recordHistory(certificate.organizationId, "certificate_removed", `Изтрит сертификат ${certificate.standard}, № ${certificate.certificateNumber}.`);
   }
 
   async function removeOrganization(organization: Organization) {
@@ -150,8 +286,8 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={Building2} label="Организации" value={organizations.length} />
         <StatCard icon={Gauge} label="Средна готовност" tone="success" value={`${readinessAverage}%`} />
+        <StatCard icon={Award} label="Сертификати" value={certificates.length} />
         <StatCard icon={FileText} label="Документи за работа" value={activeDocuments} />
-        <StatCard icon={CalendarClock} label="Просрочени задачи" tone="warning" value={overdueTasks} />
       </div>
       <div className="mt-5 rounded border border-line bg-white p-4 shadow-soft">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -178,19 +314,19 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
       </div>
 
       <div className="hidden overflow-hidden rounded border border-line bg-white shadow-soft md:block">
-        <div className="grid grid-cols-12 gap-3 border-b border-line bg-panel px-4 py-3 text-xs font-semibold uppercase text-slate-500"><span className="col-span-3">Фирма</span><span className="col-span-2">ЕИК</span><span className="col-span-3">Стандарти</span><span className="col-span-2">Готовност</span><span className="col-span-2 text-right">Действия</span></div>
+        <div className="grid grid-cols-12 gap-3 border-b border-line bg-panel px-4 py-3 text-xs font-semibold uppercase text-slate-500"><span className="col-span-3">Фирма</span><span className="col-span-2">ЕИК</span><span className="col-span-3">Стандарти</span><span className="col-span-2">Следваща сертификация</span><span className="col-span-2 text-right">Действия</span></div>
         {filtered.map((organization) => <div className="grid grid-cols-12 items-center gap-3 border-b border-line px-4 py-4 text-sm last:border-b-0" key={organization.id}>
           <div className="col-span-3"><p className="font-medium text-ink">{organization.name}</p><p className="truncate text-xs text-slate-500">{organization.activity || "Без въведена дейност"}</p></div>
           <span className="col-span-2 text-slate-600">{organization.uic}</span><div className="col-span-3"><StandardPills standards={organization.standards} /></div>
-          <div className="col-span-2"><span className="mb-1 block text-xs text-slate-600">{organization.readiness}%</span><div className="h-1.5 rounded bg-slate-100"><div className="h-1.5 rounded bg-brand" style={{ width: `${organization.readiness}%` }} /></div></div>
-          <div className="col-span-2 flex justify-end gap-1"><button aria-label={`Редактиране на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-600 hover:bg-panel hover:text-action" onClick={() => openEdit(organization)} title="Редактиране" type="button"><Edit3 className="h-4 w-4" /></button><button aria-label={`Изтриване на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-500 hover:bg-red-50 hover:text-red-700" onClick={() => removeOrganization(organization)} title="Изтриване" type="button"><Trash2 className="h-4 w-4" /></button></div>
+          <span className="col-span-2 text-xs text-slate-600">{nextCertificationFor(organization.id, certificates)}</span>
+          <div className="col-span-2 flex justify-end gap-1"><button aria-label={`Досие на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-600 hover:bg-panel hover:text-action" onClick={() => openDossier(organization)} title="Сертификати и история" type="button"><FolderOpen className="h-4 w-4" /></button><button aria-label={`Редактиране на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-600 hover:bg-panel hover:text-action" onClick={() => openEdit(organization)} title="Редактиране" type="button"><Edit3 className="h-4 w-4" /></button><button aria-label={`Изтриване на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-500 hover:bg-red-50 hover:text-red-700" onClick={() => removeOrganization(organization)} title="Изтриване" type="button"><Trash2 className="h-4 w-4" /></button></div>
         </div>)}
       </div>
 
       <div className="grid gap-3 md:hidden">{filtered.map((organization) => <div className="rounded border border-line bg-white p-4 shadow-soft" key={organization.id}>
         <div className="flex items-start justify-between gap-3"><div><p className="font-medium text-ink">{organization.name}</p><p className="text-xs text-slate-500">ЕИК {organization.uic}</p></div><StatusBadge status={organization.status} /></div>
         <p className="mt-3 text-sm text-slate-600">{organization.activity || "Без въведена дейност"}</p><div className="mt-3"><StandardPills standards={organization.standards} /></div>
-        <div className="mt-4 flex gap-2"><button className="focus-ring inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm" onClick={() => openEdit(organization)} type="button"><Edit3 className="h-4 w-4" />Редактирай</button><button aria-label="Изтриване" className="focus-ring grid h-10 w-10 place-items-center rounded border border-line text-red-700" onClick={() => removeOrganization(organization)} type="button"><Trash2 className="h-4 w-4" /></button></div>
+        <div className="mt-4 flex gap-2"><button className="focus-ring inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm" onClick={() => openDossier(organization)} type="button"><FolderOpen className="h-4 w-4" />Досие</button><button className="focus-ring inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm" onClick={() => openEdit(organization)} type="button"><Edit3 className="h-4 w-4" />Редактирай</button><button aria-label="Изтриване" className="focus-ring grid h-10 w-10 place-items-center rounded border border-line text-red-700" onClick={() => removeOrganization(organization)} type="button"><Trash2 className="h-4 w-4" /></button></div>
       </div>)}</div>
       {!filtered.length ? <div className="rounded border border-dashed border-line bg-white py-10 text-center text-sm text-slate-500">Няма фирми, които отговарят на търсенето.</div> : null}
     </Section>
@@ -218,6 +354,39 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
         </div>
         <div className="sticky bottom-0 flex justify-end gap-2 border-t border-line bg-white px-5 py-4"><button className="focus-ring rounded border border-line px-4 py-2 text-sm font-medium hover:bg-panel" onClick={() => setEditing(null)} type="button">Отказ</button><button className="focus-ring rounded bg-action px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" type="submit">Запази фирмата</button></div>
       </form>
+    </div> : null}
+
+    {dossier ? <div aria-modal="true" className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 sm:items-center sm:p-5" role="dialog">
+      <div className="max-h-[94vh] w-full overflow-y-auto rounded-t-lg bg-white shadow-xl sm:max-w-5xl sm:rounded-lg">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white px-5 py-4"><div><h2 className="text-base font-semibold text-ink">Досие на {dossier.name}</h2><p className="text-xs text-slate-500">ЕИК {dossier.uic} · {dossierCertificates.length} сертификата · {dossierHistory.length} събития</p></div><button aria-label="Затвори" className="focus-ring grid h-9 w-9 place-items-center rounded hover:bg-panel" onClick={() => setDossierId("")} type="button"><X className="h-5 w-5" /></button></div>
+        <div className="space-y-8 p-5">
+          <section>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h3 className="flex items-center gap-2 text-sm font-semibold text-ink"><Award className="h-4 w-4 text-brand" />Сертификати</h3><p className="mt-1 text-xs text-slate-500">Към една фирма могат да бъдат добавени няколко сертификата по един или различни стандарти.</p></div><button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-3 py-2 text-sm font-medium text-white hover:bg-blue-700" onClick={() => { setShowCertificateForm((current) => !current); setError(""); }} type="button"><Plus className="h-4 w-4" />Добави сертификат</button></div>
+
+            {showCertificateForm ? <form className="mb-5 grid gap-4 border-y border-line bg-panel px-4 py-4 sm:grid-cols-3" onSubmit={addCertificate}>
+              <Field label="Стандарт *"><select required value={certificateDraft.standard} onChange={(event) => setCertificateDraft({ ...certificateDraft, standard: event.target.value as IsoStandardCode })}>{standardOptions.map((standard) => <option key={standard}>{standard}</option>)}</select></Field>
+              <Field label="Номер на сертификата *"><input required value={certificateDraft.certificateNumber} onChange={(event) => setCertificateDraft({ ...certificateDraft, certificateNumber: event.target.value })} /></Field>
+              <Field label="Сертифициращ орган"><input value={certificateDraft.certificationBody} onChange={(event) => setCertificateDraft({ ...certificateDraft, certificationBody: event.target.value })} /></Field>
+              <Field label="Дата на издаване"><input type="date" value={certificateDraft.issuedAt} onChange={(event) => setCertificateDraft({ ...certificateDraft, issuedAt: event.target.value })} /></Field>
+              <Field label="Валиден до"><input type="date" value={certificateDraft.validUntil} onChange={(event) => setCertificateDraft({ ...certificateDraft, validUntil: event.target.value })} /></Field>
+              <Field label="Следваща сертификация"><input type="date" value={certificateDraft.nextCertificationDate} onChange={(event) => setCertificateDraft({ ...certificateDraft, nextCertificationDate: event.target.value })} /></Field>
+              <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-3">Бележки<textarea className="focus-ring min-h-20 rounded border border-line bg-white p-3 text-sm font-normal outline-none" value={certificateDraft.notes} onChange={(event) => setCertificateDraft({ ...certificateDraft, notes: event.target.value })} /></label>
+              {error ? <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-3">{error}</p> : null}
+              <div className="flex justify-end gap-2 sm:col-span-3"><button className="focus-ring rounded border border-line bg-white px-3 py-2 text-sm" onClick={() => setShowCertificateForm(false)} type="button">Отказ</button><button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-3 py-2 text-sm font-medium text-white" disabled={syncing} type="submit"><Save className="h-4 w-4" />Запази сертификата</button></div>
+            </form> : null}
+
+            {dossierCertificates.length ? <div className="overflow-hidden rounded border border-line">
+              <div className="hidden grid-cols-12 gap-3 border-b border-line bg-panel px-4 py-2 text-xs font-semibold uppercase text-slate-500 md:grid"><span className="col-span-2">Стандарт</span><span className="col-span-2">Номер</span><span className="col-span-2">Издаден</span><span className="col-span-2">Валиден до</span><span className="col-span-3">Следваща сертификация</span><span className="text-right">Действия</span></div>
+              {dossierCertificates.map((certificate) => <div className="grid gap-2 border-b border-line px-4 py-3 text-sm last:border-b-0 md:grid-cols-12 md:items-center md:gap-3" key={certificate.id}><div className="md:col-span-2"><span className="font-medium text-ink">{certificate.standard}</span><span className={`ml-2 text-xs ${certificateStatus(certificate.validUntil).tone}`}>{certificateStatus(certificate.validUntil).label}</span></div><span className="text-slate-600 md:col-span-2">№ {certificate.certificateNumber}</span><span className="text-slate-600 md:col-span-2">{formatDate(certificate.issuedAt)}</span><span className="text-slate-600 md:col-span-2">{formatDate(certificate.validUntil)}</span><span className="font-medium text-ink md:col-span-3">{formatDate(certificate.nextCertificationDate)}</span><div className="flex justify-end"><button aria-label="Изтрий сертификата" className="focus-ring grid h-8 w-8 place-items-center rounded text-red-700 hover:bg-red-50" onClick={() => removeCertificate(certificate)} title="Изтриване" type="button"><Trash2 className="h-4 w-4" /></button></div>{certificate.certificationBody || certificate.notes ? <p className="text-xs text-slate-500 md:col-span-11 md:col-start-2">{[certificate.certificationBody, certificate.notes].filter(Boolean).join(" · ")}</p> : null}</div>)}
+            </div> : <div className="rounded border border-dashed border-line py-8 text-center text-sm text-slate-500">Все още няма добавени сертификати.</div>}
+          </section>
+
+          <section>
+            <div className="mb-4"><h3 className="flex items-center gap-2 text-sm font-semibold text-ink"><History className="h-4 w-4 text-brand" />История на фирмата</h3><p className="mt-1 text-xs text-slate-500">Автоматичен запис на добавянето, редакциите, сертификатите и генерираните ISO системи.</p></div>
+            {dossierHistory.length ? <ol className="border-l border-line pl-5">{dossierHistory.map((entry) => <li className="relative pb-5 last:pb-0" key={entry.id}><span className="absolute -left-[25px] top-1.5 h-2 w-2 rounded-full bg-brand" /><p className="text-sm text-ink">{entry.description}</p><p className="mt-1 text-xs text-slate-500">{formatDateTime(entry.eventDate)}</p></li>)}</ol> : <div className="rounded border border-dashed border-line py-8 text-center text-sm text-slate-500">Историята ще започне при следващото записано действие.</div>}
+          </section>
+        </div>
+      </div>
     </div> : null}
   </>;
 }
@@ -288,6 +457,81 @@ function toDatabase(value: Organization, ownerId: string) {
   };
 }
 
+type CertificateRow = {
+  id: string;
+  organization_id: string;
+  standard: IsoStandardCode;
+  certificate_number: string | null;
+  certification_body: string | null;
+  issued_at: string | null;
+  valid_until: string | null;
+  next_certification_date: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+type HistoryRow = {
+  id: string;
+  organization_id: string;
+  event_type: OrganizationHistoryEntry["eventType"];
+  description: string;
+  event_date: string;
+};
+
+function certificateFromDatabase(value: CertificateRow): OrganizationCertificate {
+  return {
+    id: value.id,
+    organizationId: value.organization_id,
+    standard: value.standard,
+    certificateNumber: value.certificate_number ?? "",
+    certificationBody: value.certification_body ?? "",
+    issuedAt: value.issued_at ?? "",
+    validUntil: value.valid_until ?? "",
+    nextCertificationDate: value.next_certification_date ?? "",
+    notes: value.notes ?? "",
+    createdAt: value.created_at
+  };
+}
+
+function certificateToDatabase(value: OrganizationCertificate) {
+  return {
+    id: value.id,
+    organization_id: value.organizationId,
+    standard: value.standard,
+    certificate_number: value.certificateNumber.trim(),
+    certification_body: value.certificationBody.trim() || null,
+    issued_at: value.issuedAt || null,
+    valid_until: value.validUntil || null,
+    next_certification_date: value.nextCertificationDate || null,
+    notes: value.notes.trim() || null,
+    created_at: value.createdAt
+  };
+}
+
+function historyFromDatabase(value: HistoryRow): OrganizationHistoryEntry {
+  return { id: value.id, organizationId: value.organization_id, eventType: value.event_type, description: value.description, eventDate: value.event_date };
+}
+
+function formatDate(value: string) {
+  if (!value) return "Не е зададена";
+  return new Intl.DateTimeFormat("bg-BG").format(new Date(`${value}T00:00:00`));
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("bg-BG", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function nextCertificationFor(organizationId: string, certificates: OrganizationCertificate[]) {
+  const dates = certificates.filter((item) => item.organizationId === organizationId && item.nextCertificationDate).map((item) => item.nextCertificationDate).sort();
+  return dates[0] ? formatDate(dates[0]) : "Не е зададена";
+}
+
+function certificateStatus(validUntil: string) {
+  if (!validUntil) return { label: "Без срок", tone: "text-slate-500" };
+  const expired = new Date(`${validUntil}T23:59:59`) < new Date();
+  return expired ? { label: "Изтекъл", tone: "text-red-700" } : { label: "Активен", tone: "text-emerald-700" };
+}
+
 function LoadingState() {
   return <div className="grid min-h-[55vh] place-items-center"><div className="flex items-center gap-2 text-sm text-slate-600"><Loader2 className="h-5 w-5 animate-spin text-action" />Свързване със Supabase...</div></div>;
 }
@@ -309,7 +553,7 @@ function LoginPanel({ supabase }: { supabase: SupabaseClient }) {
 
   return <div className="grid min-h-[70vh] place-items-center py-8">
     <form className="w-full max-w-md rounded border border-line bg-white p-6 shadow-soft" onSubmit={signIn}>
-      <div className="mb-6 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded bg-brand text-white"><LogIn className="h-5 w-5" /></span><div><h2 className="font-semibold text-ink">Вход в IMS платформата</h2><p className="text-sm text-slate-500">Достъп само за администратора</p></div></div>
+      <div className="mb-6 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded bg-brand text-white"><LogIn className="h-5 w-5" /></span><div><h2 className="font-semibold text-ink">Вход в ISO платформата</h2><p className="text-sm text-slate-500">Достъп само за администратора</p></div></div>
       <div className="grid gap-4"><Field label="Имейл"><input autoComplete="email" autoFocus required type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></Field><Field label="Парола"><input autoComplete="current-password" required type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></Field></div>
       {error ? <p className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
       <button className="focus-ring mt-5 inline-flex h-10 w-full items-center justify-center gap-2 rounded bg-action px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60" disabled={loading} type="submit">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}Вход</button>
