@@ -42,7 +42,7 @@ function makeId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `org-${Date.now()}`;
 }
 
-export function OrganizationWorkspace({ activeDocuments }: { activeDocuments: number }) {
+export function OrganizationWorkspace({ activeDocuments, view }: { activeDocuments: number; view: "dashboard" | "organizations" }) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [organizations, setOrganizations] = useState<Organization[]>(supabase ? [] : defaultOrganizations);
   const [certificates, setCertificates] = useState<OrganizationCertificate[]>([]);
@@ -282,7 +282,7 @@ export function OrganizationWorkspace({ activeDocuments }: { activeDocuments: nu
   if (supabase && !user) return <LoginPanel supabase={supabase} />;
 
   return <>
-    <Section id="dashboard" title="Табло" description="Общ поглед върху клиентите, готовността и критичните действия.">
+    {view === "dashboard" ? <Section id="dashboard" title="Табло" description="Общ поглед върху клиентите, готовността и критичните действия.">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={Building2} label="Организации" value={organizations.length} />
         <StatCard icon={Gauge} label="Средна готовност" tone="success" value={`${readinessAverage}%`} />
@@ -305,9 +305,9 @@ export function OrganizationWorkspace({ activeDocuments }: { activeDocuments: nu
           <div className="h-2 rounded bg-slate-100"><div className="h-2 rounded bg-brand" style={{ width: `${organization.readiness}%` }} /></div>
         </div>)}</div> : <p className="py-5 text-center text-sm text-slate-500">Все още няма добавени фирми.</p>}
       </div>
-    </Section>
+    </Section> : null}
 
-    <Section id="organizations" title="Фирми" description="Добавяйте, намирайте и редактирайте клиентските организации.">
+    {view === "organizations" ? <Section id="organizations" title="Фирми" description="Добавяйте, намирайте и редактирайте клиентските организации.">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row">
         <div className="flex flex-1 items-center gap-2 rounded border border-line bg-white px-3 py-2 shadow-sm"><Search className="h-4 w-4 text-slate-400" /><input aria-label="Търсене на фирми" className="focus-ring w-full border-0 bg-transparent text-sm outline-none" onChange={(e) => setQuery(e.target.value)} placeholder="Търсене по фирма, ЕИК, дейност или стандарт" value={query} /></div>
         <button className="focus-ring inline-flex items-center justify-center gap-2 rounded bg-action px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" onClick={openNew} type="button"><Plus className="h-4 w-4" />Добави фирма</button>
@@ -329,7 +329,7 @@ export function OrganizationWorkspace({ activeDocuments }: { activeDocuments: nu
         <div className="mt-4 flex gap-2"><button className="focus-ring inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm" onClick={() => openDossier(organization)} type="button"><FolderOpen className="h-4 w-4" />Досие</button><button className="focus-ring inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm" onClick={() => openEdit(organization)} type="button"><Edit3 className="h-4 w-4" />Редактирай</button><button aria-label="Изтриване" className="focus-ring grid h-10 w-10 place-items-center rounded border border-line text-red-700" onClick={() => removeOrganization(organization)} type="button"><Trash2 className="h-4 w-4" /></button></div>
       </div>)}</div>
       {!filtered.length ? <div className="rounded border border-dashed border-line bg-white py-10 text-center text-sm text-slate-500">Няма фирми, които отговарят на търсенето.</div> : null}
-    </Section>
+    </Section> : null}
 
     {editing ? <div aria-modal="true" className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 sm:items-center sm:p-5" role="dialog">
       <form className="max-h-[94vh] w-full overflow-y-auto rounded-t-lg bg-white shadow-xl sm:max-w-3xl sm:rounded-lg" onSubmit={saveOrganization}>
