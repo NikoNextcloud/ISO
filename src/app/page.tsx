@@ -1,6 +1,7 @@
 import { Bot, LayoutTemplate, ShieldCheck, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { DocumentWorkspace } from "@/components/document-workspace";
+import { Iso27001ExportWorkspace } from "@/components/iso27001-export-workspace";
 import { OrganizationWorkspace } from "@/components/organization-workspace";
 import { Section, StandardPills, StatusBadge } from "@/components/ui";
 import { documents, organizations, standards, tasks, templates } from "@/lib/mock-data";
@@ -17,6 +18,8 @@ export default function Home() {
     </Section>
 
     <DocumentWorkspace />
+
+    <Iso27001ExportWorkspace />
 
     <Section id="templates" title="Шаблони" description="Шаблони и полета за бъдещия DOCX/PDF генератор.">
       <div className="grid gap-4 md:grid-cols-3">{templates.map((template) => <div className="rounded border border-line bg-white p-4 shadow-soft" key={template.id}><div className="mb-3 flex items-center gap-2"><LayoutTemplate className="h-4 w-4 text-action" /><h3 className="text-sm font-semibold text-ink">{template.title}</h3></div><StandardPills standards={template.standards} /><div className="mt-4 flex flex-wrap gap-1.5">{template.placeholders.map((placeholder) => <span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600" key={placeholder}>{placeholder}</span>)}</div></div>)}</div>

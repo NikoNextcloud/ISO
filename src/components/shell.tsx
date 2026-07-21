@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, Bot, Building2, ClipboardCheck, FileText, Gauge, LayoutTemplate, ShieldCheck } from "lucide-react";
+import { Bell, Bot, Building2, ClipboardCheck, FileArchive, FileText, Gauge, LayoutTemplate, ShieldCheck } from "lucide-react";
 
 const navItems = [
   { id: "dashboard", label: "Табло", icon: Gauge },
   { id: "organizations", label: "Фирми", icon: Building2 },
   { id: "standards", label: "Стандарти", icon: ShieldCheck },
   { id: "documents", label: "Документи", icon: FileText },
+  { id: "iso27001-system", label: "ISO 27001 система", icon: FileArchive },
   { id: "templates", label: "Шаблони", icon: LayoutTemplate },
   { id: "tasks", label: "Задачи", icon: ClipboardCheck },
   { id: "assistant", label: "AI асистент", icon: Bot }

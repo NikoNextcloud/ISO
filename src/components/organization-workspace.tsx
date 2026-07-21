@@ -23,7 +23,7 @@ const defaultOrganizations: Organization[] = [
   { id: "org-3", name: "Енерго Плант ЕООД", uic: "205098765", address: "Стара Загора, Производствен парк", manager: "Николай Димитров", contactEmail: "ims@energoplant.example", employees: 142, activity: "Енергийно интензивно производство", sites: 3, standards: ["ISO 9001", "ISO 14001", "ISO 45001", "ISO 50001"], status: "ready", readiness: 91, nextAuditDate: "2026-10-22" }
 ];
 
-const emptyOrganization: Organization = { id: "", name: "", uic: "", address: "", manager: "", contactEmail: "", employees: 0, activity: "", sites: 1, standards: ["ISO 9001"], status: "draft", readiness: 0, nextAuditDate: "" };
+const emptyOrganization: Organization = { id: "", name: "", uic: "", address: "", manager: "", representative: "", contactName: "", contactPhone: "", contactEmail: "", employees: 0, activity: "", sites: 1, standards: ["ISO 9001"], status: "draft", readiness: 0, nextAuditDate: "" };
 
 function makeId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `org-${Date.now()}`;
@@ -203,6 +203,9 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
           <Field label="ЕИК *"><input inputMode="numeric" required value={editing.uic} onChange={(e) => setEditing({ ...editing, uic: e.target.value })} /></Field>
           <Field label="Адрес"><input value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} /></Field>
           <Field label="Управител"><input value={editing.manager} onChange={(e) => setEditing({ ...editing, manager: e.target.value })} /></Field>
+          <Field label="Представител на ръководството"><input value={editing.representative ?? ""} onChange={(e) => setEditing({ ...editing, representative: e.target.value })} /></Field>
+          <Field label="Лице за контакт"><input value={editing.contactName ?? ""} onChange={(e) => setEditing({ ...editing, contactName: e.target.value })} /></Field>
+          <Field label="Телефон"><input value={editing.contactPhone ?? ""} onChange={(e) => setEditing({ ...editing, contactPhone: e.target.value })} /></Field>
           <Field label="Имейл"><input type="email" value={editing.contactEmail} onChange={(e) => setEditing({ ...editing, contactEmail: e.target.value })} /></Field>
           <Field label="Дейност"><input value={editing.activity} onChange={(e) => setEditing({ ...editing, activity: e.target.value })} /></Field>
           <Field label="Брой служители"><input min="0" type="number" value={editing.employees} onChange={(e) => setEditing({ ...editing, employees: Number(e.target.value) })} /></Field>
@@ -229,6 +232,9 @@ type OrganizationRow = {
   uic: string;
   address: string | null;
   manager: string | null;
+  representative: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
   contact_email: string | null;
   employees_count: number;
   activity: string | null;
@@ -246,6 +252,9 @@ function fromDatabase(value: OrganizationRow): Organization {
     uic: value.uic,
     address: value.address ?? "",
     manager: value.manager ?? "",
+    representative: value.representative ?? "",
+    contactName: value.contact_name ?? "",
+    contactPhone: value.contact_phone ?? "",
     contactEmail: value.contact_email ?? "",
     employees: value.employees_count ?? 0,
     activity: value.activity ?? "",
@@ -265,6 +274,9 @@ function toDatabase(value: Organization, ownerId: string) {
     uic: value.uic.trim(),
     address: value.address.trim() || null,
     manager: value.manager.trim() || null,
+    representative: value.representative?.trim() || null,
+    contact_name: value.contactName?.trim() || null,
+    contact_phone: value.contactPhone?.trim() || null,
     contact_email: value.contactEmail.trim() || null,
     employees_count: value.employees,
     activity: value.activity.trim() || null,

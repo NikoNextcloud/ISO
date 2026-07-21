@@ -8,6 +8,9 @@ export type Organization = {
   uic: string;
   address: string;
   manager: string;
+  representative?: string;
+  contactName?: string;
+  contactPhone?: string;
   contactEmail: string;
   employees: number;
   activity: string;
