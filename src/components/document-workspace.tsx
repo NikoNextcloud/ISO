@@ -2,13 +2,14 @@
 
 import { cloneElement, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { Copy, Download, Edit3, FilePlus2, FileText, Loader2, Search, Trash2, Upload, X } from "lucide-react";
+import { Copy, Download, Edit3, FileArchive, FilePlus2, FileText, Loader2, Search, Trash2, Upload, X } from "lucide-react";
 import { Section, StandardPills, StatusBadge } from "@/components/ui";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { storageErrorMessage } from "@/lib/storage-errors";
-import type { DocumentStatus, ImsDocument, IsoStandardCode, Organization } from "@/lib/types";
+import type { DocumentStatus, ImsDocument, IsoStandardCode, Organization, OrganizationHistoryEntry } from "@/lib/types";
 
 const DOCUMENTS_KEY = "iso-certification-documents-v1";
+const HISTORY_KEY = "iso-certification-history-v1";
 const ORGANIZATIONS_KEY = "iso-certification-organizations-v2";
 const LEGACY_ORGANIZATIONS_KEY = "ims-ai-organizations-v1";
 const standardOptions: IsoStandardCode[] = ["ISO 9001", "ISO 14001", "ISO 45001", "ISO 27001", "ISO 50001"];
@@ -39,6 +40,7 @@ export function DocumentWorkspace() {
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(!supabase);
   const [documents, setDocuments] = useState<ImsDocument[]>(supabase ? [] : initialDocuments);
+  const [generatedSystems, setGeneratedSystems] = useState<OrganizationHistoryEntry[]>([]);
   const [organizations, setOrganizations] = useState<{ id: string; name: string }[]>(supabase ? [] : localOrganizations);
   const [editing, setEditing] = useState<ImsDocument | null>(null);
   const [query, setQuery] = useState("");
@@ -49,8 +51,10 @@ export function DocumentWorkspace() {
   useEffect(() => {
     if (supabase) return;
     const savedDocuments = window.localStorage.getItem(DOCUMENTS_KEY);
+    const savedHistory = window.localStorage.getItem(HISTORY_KEY);
     const savedOrganizations = window.localStorage.getItem(ORGANIZATIONS_KEY) ?? window.localStorage.getItem(LEGACY_ORGANIZATIONS_KEY);
     if (savedDocuments) try { setDocuments(JSON.parse(savedDocuments) as ImsDocument[]); } catch { window.localStorage.removeItem(DOCUMENTS_KEY); }
+    if (savedHistory) try { setGeneratedSystems((JSON.parse(savedHistory) as OrganizationHistoryEntry[]).filter((entry) => entry.eventType === "system_exported")); } catch { window.localStorage.removeItem(HISTORY_KEY); }
     if (savedOrganizations) try { setOrganizations((JSON.parse(savedOrganizations) as Organization[]).map(({ id, name }) => ({ id, name }))); } catch { /* Keep demo organizations. */ }
   }, [supabase]);
 
@@ -68,12 +72,15 @@ export function DocumentWorkspace() {
     setLoading(true);
     Promise.all([
       supabase.from("organizations").select("id,name").order("name"),
-      supabase.from("documents").select("*").order("updated_at", { ascending: false })
-    ]).then(([organizationResult, documentResult]) => {
+      supabase.from("documents").select("*").order("updated_at", { ascending: false }),
+      supabase.from("organization_history").select("id,organization_id,event_type,description,event_date,file_path,file_name,file_size").eq("event_type", "system_exported").order("event_date", { ascending: false })
+    ]).then(([organizationResult, documentResult, historyResult]) => {
       if (organizationResult.error) setError(organizationResult.error.message);
       else setOrganizations(organizationResult.data ?? []);
       if (documentResult.error) setError(documentResult.error.message);
       else setDocuments((documentResult.data ?? []).map(fromDatabase));
+      if (historyResult.error) setError(historyResult.error.message);
+      else setGeneratedSystems((historyResult.data ?? []).map(historyFromDatabase));
       setLoading(false);
     });
   }, [supabase, user]);
@@ -157,8 +164,21 @@ export function DocumentWorkspace() {
     anchor.href = url; anchor.download = item.fileName; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
   }
 
+  async function downloadGeneratedSystem(item: OrganizationHistoryEntry) {
+    if (!supabase || !user || !item.filePath || !item.fileName) return;
+    setError("");
+    const { data, error } = await supabase.storage.from("organization-files").download(item.filePath);
+    if (error) return setError(`ZIP файлът не може да бъде изтеглен: ${storageErrorMessage(error.message)}`);
+    const url = URL.createObjectURL(data); const anchor = document.createElement("a");
+    anchor.href = url; anchor.download = item.fileName; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
+  }
+
   return <Section id="documents" title="Документи" description="Пълен регистър с редактиране на съдържание, версии, статуси и приложими стандарти.">
     {supabase && authChecked && !user ? <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Влезте в приложението, за да управлявате документите в Supabase.</div> : <>
+      <section className="mb-8">
+        <div className="mb-4 flex items-end justify-between gap-3"><div><h3 className="flex items-center gap-2 text-base font-bold text-ink"><FileArchive className="h-5 w-5 text-teal-600" />Генерирани системи</h3><p className="mt-1 text-sm text-slate-500">Архив на всички генерирани ZIP версии по фирми.</p></div><span className="rounded-md border border-line bg-white px-3 py-1.5 text-sm font-semibold text-slate-600">{generatedSystems.length}</span></div>
+        {generatedSystems.length ? <div className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-white shadow-soft">{generatedSystems.map((item) => <article className="flex flex-col justify-between gap-4 p-4 sm:flex-row sm:items-center" key={item.id}><div className="min-w-0"><div className="flex items-center gap-2"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700"><FileArchive className="h-4 w-4" /></span><div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{item.fileName || "Генерирана ISO система"}</p><p className="mt-0.5 text-xs text-slate-500">{organizations.find((organization) => organization.id === item.organizationId)?.name ?? "Фирма"} · {formatDateTime(item.eventDate)}{item.fileSize ? ` · ${formatFileSize(item.fileSize)}` : ""}</p></div></div><p className="mt-3 text-sm text-slate-600 sm:ml-11">{item.description}</p></div>{item.filePath && item.fileName ? <button className="focus-ring inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-white px-4 text-sm font-semibold text-action hover:bg-blue-50" onClick={() => downloadGeneratedSystem(item)} type="button"><Download className="h-4 w-4" />Свали ZIP</button> : <span className="shrink-0 text-xs font-medium text-amber-700">Стар запис без ZIP файл</span>}</article>)}</div> : <div className="rounded-lg border border-dashed border-line bg-white py-9 text-center"><FileArchive className="mx-auto h-6 w-6 text-slate-300" /><p className="mt-2 text-sm text-slate-500">Все още няма генерирани системи.</p></div>}
+      </section>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row"><div className="flex h-11 flex-1 items-center gap-2 rounded-lg border border-line bg-white px-3 shadow-sm"><Search className="h-4 w-4 text-slate-400" /><input aria-label="Търсене на документи" className="focus-ring w-full border-0 bg-transparent text-sm outline-none" onChange={(event) => setQuery(event.target.value)} placeholder="Търсене по заглавие, файл, собственик, версия или стандарт" value={query} /></div><button className="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-action px-5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50" disabled={!organizations.length} onClick={openNew} type="button"><FilePlus2 className="h-4 w-4" />Добави документ</button></div>
       {error ? <p className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
       {!organizations.length && !loading ? <p className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">Първо добавете поне една фирма.</p> : null}
@@ -184,7 +204,10 @@ export function DocumentWorkspace() {
 function DocField({ label, children }: { label: string; children: React.ReactElement<{ className?: string }> }) { return <label className="grid gap-1.5 text-sm font-medium text-ink">{label}{cloneElement(children, { className: `focus-ring h-10 w-full rounded border border-line bg-white px-3 text-sm font-normal outline-none ${children.props.className ?? ""}` })}</label>; }
 
 type DocumentRow = { id: string; organization_id: string; title: string; document_type: ImsDocument["type"]; standards: IsoStandardCode[]; owner: string | null; status: DocumentStatus; version: string; content: { body?: string } | string | null; updated_at: string; file_path: string | null; original_filename: string | null; file_size: number | null; mime_type: string | null };
+type GeneratedSystemRow = { id: string; organization_id: string; event_type: OrganizationHistoryEntry["eventType"]; description: string; event_date: string; file_path: string | null; file_name: string | null; file_size: number | null };
 function fromDatabase(value: DocumentRow): ImsDocument { return { id: value.id, organizationId: value.organization_id, title: value.title, type: value.document_type, standards: value.standards ?? [], owner: value.owner ?? "", status: value.status, version: value.version, updatedAt: value.updated_at.slice(0, 10), content: typeof value.content === "string" ? value.content : value.content?.body ?? "", filePath: value.file_path ?? undefined, fileName: value.original_filename ?? undefined, fileSize: value.file_size ?? undefined, mimeType: value.mime_type ?? undefined }; }
+function historyFromDatabase(value: GeneratedSystemRow): OrganizationHistoryEntry { return { id: value.id, organizationId: value.organization_id, eventType: value.event_type, description: value.description, eventDate: value.event_date, filePath: value.file_path ?? undefined, fileName: value.file_name ?? undefined, fileSize: value.file_size ?? undefined }; }
 function toDatabase(value: ImsDocument) { return { organization_id: value.organizationId, title: value.title.trim(), document_type: value.type, standards: value.standards, owner: value.owner.trim() || null, status: value.status, version: value.version.trim(), content: { body: value.content ?? "" }, file_path: value.filePath ?? null, original_filename: value.fileName ?? null, file_size: value.fileSize ?? null, mime_type: value.mimeType ?? null }; }
 function safeFileName(value: string) { return value.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(0, 140) || "file"; }
 function formatFileSize(value: number) { if (!value) return "0 KB"; if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`; return `${(value / 1024 / 1024).toFixed(1)} MB`; }
+function formatDateTime(value: string) { return new Intl.DateTimeFormat("bg-BG", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
