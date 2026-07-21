@@ -15,18 +15,11 @@ export function statusLabel(status: OrganizationStatus | DocumentStatus | TaskSt
     overdue: "Просрочена",
     done: "Готова"
   };
-
   return labels[status] ?? status;
 }
 
 export function statusClass(status: OrganizationStatus | DocumentStatus | TaskStatus) {
-  if (status === "approved" || status === "ready" || status === "certified" || status === "done") {
-    return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  }
-
-  if (status === "attention" || status === "needs_update" || status === "overdue") {
-    return "bg-amber-50 text-amber-800 border-amber-200";
-  }
-
+  if (status === "approved" || status === "ready" || status === "certified" || status === "done") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (status === "attention" || status === "needs_update" || status === "overdue") return "bg-amber-50 text-amber-800 border-amber-200";
   return "bg-sky-50 text-sky-700 border-sky-200";
 }
