@@ -1,74 +1,112 @@
-# ISO Smart Manager AI — MVP
+# IMS AI Platform
 
-Уеб приложение за ISO консултанти: автоматизирано изграждане и управление на интегрирани системи за управление по **ISO 9001, 14001, 45001, 27001 и 50001** — с общи процедури за припокриващите се изисквания вместо дублирани документи.
+MVP skeleton за уеб платформа за автоматизирано внедряване и управление на интегрирани ISO системи:
 
-## Какво включва MVP-то
+- ISO 9001
+- ISO 14001
+- ISO 45001
+- ISO/IEC 27001
+- ISO 50001
 
-| Модул | Описание |
-|---|---|
-| **Табло** | Фирми, средна готовност, предстоящи одити, НС/CAPA, задачи, изтичащи сертификати, AI предложения, документи по статус |
-| **Нов клиент (AI Wizard)** | Кратък въпросник → бутон „Създай система“ → ~20+ документа: наръчник, политика, 7 общи процедури, анализи (контекст, SWOT/PESTLE, заинтересовани страни), регистри, матрици, планове, формуляри + рискове, цели/KPI, одитна програма и задачи |
-| **Обединяване (IMS)** | Общите изисквания (документи, одити, CAPA, риск, преглед от ръководството, обучение, комуникация) се генерират като ЕДНА процедура за всички избрани стандарти; специфичните документи се добавят по стандарт |
-| **Документи** | Пълнотекстово търсене, филтри, работен поток Чернова → Преглед → Одобрен → Активен → Архив, версии и история, електронен подпис, редакция, печат/PDF |
-| **Рискове** | Матрица В×Вл (1–25), нива нисък/среден/висок, контроли, мерки, остатъчен риск |
-| **Одити** | Вътрешни/външни/сертификационни/надзорни/ресертификация, контролен списък по клаузи 4–10, констатации, регистриране на НС |
-| **НС / CAPA** | Категории, 5 Защо, първопричина, корекция/коригиращо/превантивно действие, срокове, закриване |
-| **ISO 27001** | Регистър на активи с C-I-A, заплахи, уязвимости, Annex A контроли, SoA, Risk Treatment Plan |
-| **ISO 50001** | EnPI показатели, базова линия → текущо → цел, % подобрение |
-| **AI Асистент** | Чат с команди („Направи политика…“, „Добави нов риск за…“), които реално създават обекти в системата; опционално свързване с Cloudflare Workers AI за свободни въпроси |
-| **AI анализ на документи** | Качване на файлове → симулиран анализ с открити липси (реалният анализ идва с бекенд фазата) |
-| **Експорт** | ZIP с цялата документация на клиент (.md), JSON резервно копие / възстановяване |
-| **Настройки** | Роли (админ/консултант/одитор/клиент/само четене), AI endpoint, нулиране до демо данни |
+Първата версия включва базов UI, mock данни, Supabase/PostgreSQL schema, AI adapter placeholder и структура за deployment във Vercel.
 
-Данните се съхраняват **локално в браузъра (localStorage)** — включен е демо клиент „Принт Медия ЕООД“.
+## Stack
 
-## Стартиране
+- Frontend: Next.js + React + TypeScript
+- UI: Tailwind CSS + lucide-react
+- Database/Auth: Supabase PostgreSQL + Supabase Auth
+- AI: provider abstraction с `mock` режим и място за Cloudflare AI/OpenAI
+- Deployment: Vercel
+- Repository: GitHub
+
+## Modules in MVP
+
+- Dashboard с готовност, документи, задачи и одити
+- Организации
+- ISO стандарти
+- Документи
+- Шаблони
+- Задачи и напомняния
+- AI assistant placeholder
+- SQL schema/migration за Supabase
+
+## Local setup
 
 ```bash
 npm install
-npm run dev        # http://localhost:3000
+npm run dev
 ```
 
-Продукционен статичен билд (папка `out/`):
+Open `http://localhost:3000`.
+
+## Environment
+
+Copy `.env.example` to `.env.local` and fill:
 
 ```bash
-npm run build
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+AI_PROVIDER=mock
 ```
 
-## Деплой (безплатно)
+Keep `AI_PROVIDER=mock` until a real Cloudflare/OpenAI adapter is implemented.
 
-- **Vercel**: импортирай репото → готово (разпознава Next.js автоматично).
-- **GitHub Pages / Cloudflare Pages**: `npm run build` → качи съдържанието на `out/`.
+## Supabase setup
 
-## Cloudflare Workers AI (безплатен AI слой)
+1. Create a Supabase project.
+2. Run `supabase/migrations/001_initial_schema.sql` in the Supabase SQL editor or through the Supabase CLI.
+3. Enable email/password auth or the preferred auth providers.
+4. Add the Supabase URL and anon key to `.env.local` and Vercel environment variables.
 
-1. `npm create cloudflare@latest iso-ai` → избери "Hello World" Worker.
-2. Замени кода на worker-а с примера от **Настройки → „Покажи примерен код за Worker-а“** в приложението.
-3. В `wrangler.toml` добави:
-   ```toml
-   [ai]
-   binding = "AI"
-   ```
-4. `npx wrangler deploy` → копирай URL-а (`https://iso-ai.xxx.workers.dev`).
-5. Постави URL-а в **Настройки → AI интеграция**. Готово — асистентът вече отговаря и на свободни въпроси с LLM (безплатният слой е ~10 000 неврона/ден).
+The initial schema includes:
 
-Без endpoint асистентът работи в локален команден режим (командите пак създават документи, рискове и KPI).
+- `organizations`
+- `standards`
+- `organization_standards`
+- `processes`
+- `document_templates`
+- `documents`
+- `tasks`
+- `ai_requests`
+- `audit_log`
 
-## Структура
+RLS is enabled for the main tables. The first policies are scoped to organization ownership and active templates.
 
+## AI layer
+
+The app exposes `POST /api/ai/draft`.
+
+Expected payload:
+
+```json
+{
+  "organizationId": "org-1",
+  "prompt": "Генерирай оценка на риска за CNC оператор",
+  "standards": ["ISO 9001", "ISO 45001"]
+}
 ```
-app/            страници (табло, клиенти, wizard, документи, асистент, настройки)
-components/     Shell (навигация) + UI примитиви
-lib/types.ts    домейн модел (клиенти, документи, рискове, одити, НС, активи, енергия…)
-lib/generator.ts генератор на документацията + обединяване по стандарти
-lib/ai.ts       Cloudflare Workers AI клиент + локален разбор на команди
-lib/exportZip.ts ZIP/JSON експорт
-lib/store.tsx   localStorage store + демо данни
-```
 
-## Следваща фаза (по избрания път Next.js + Supabase)
+Current behavior:
 
-1. **Supabase** (безплатен tier): Auth + Postgres + Storage; таблици 1:1 с типовете от `lib/types.ts`; RLS за мулти-тенант (консултант ↔ клиенти) и реални роли.
-2. Замяна на `lib/store.tsx` със Supabase клиент (същият интерфейс `useStore` → минимални промени по страниците).
-3. Реален AI анализ на качени файлове (extract + Workers AI) и DOCX/PDF генерация.
-4. Известия по email (Supabase Edge Functions + cron за изтичащи сертификати и срокове).
+- `AI_PROVIDER=mock` returns a structured placeholder response.
+- Other providers intentionally throw until implemented.
+
+Next implementation step is to add provider-specific calls inside `src/lib/ai.ts`.
+
+## Suggested next phases
+
+1. Connect Supabase reads/writes for organizations, documents, templates and tasks.
+2. Add Supabase Auth screens and user-owned organization access.
+3. Implement CRUD forms for organizations and standard selection.
+4. Add DOCX template generation and PDF export.
+5. Implement Cloudflare AI/OpenAI adapter with audit logging.
+6. Add real reminder scheduling through email/calendar/SMS provider.
+7. Add document versioning UI and approval workflow.
+
+## Deployment
+
+1. Push the project to GitHub.
+2. Import the repo in Vercel.
+3. Add the same environment variables from `.env.example`.
+4. Deploy.
