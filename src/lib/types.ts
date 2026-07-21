@@ -38,6 +38,7 @@ export type ImsDocument = {
   status: DocumentStatus;
   version: string;
   updatedAt: string;
+  content?: string;
 };
 
 export type Template = {
