@@ -1,8 +1,10 @@
 "use client";
 
 import { cloneElement, useEffect, useMemo, useState } from "react";
-import { Building2, CalendarClock, Edit3, FileText, Gauge, Plus, Search, Trash2, X } from "lucide-react";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { Building2, CalendarClock, Cloud, Edit3, FileText, Gauge, Loader2, LogIn, LogOut, Plus, Search, Trash2, X } from "lucide-react";
 import { Section, StandardPills, StatCard, StatusBadge } from "@/components/ui";
+import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { IsoStandardCode, Organization, OrganizationStatus } from "@/lib/types";
 
 const STORAGE_KEY = "ims-ai-organizations-v1";
@@ -28,24 +30,57 @@ function makeId() {
 }
 
 export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activeDocuments: number; overdueTasks: number }) {
-  const [organizations, setOrganizations] = useState<Organization[]>(defaultOrganizations);
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const [organizations, setOrganizations] = useState<Organization[]>(supabase ? [] : defaultOrganizations);
   const [storageReady, setStorageReady] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [authChecked, setAuthChecked] = useState(!supabase);
+  const [syncing, setSyncing] = useState(Boolean(supabase));
+  const [syncError, setSyncError] = useState("");
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Organization | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (supabase) return;
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try { setOrganizations(JSON.parse(saved) as Organization[]); }
       catch { window.localStorage.removeItem(STORAGE_KEY); }
     }
     setStorageReady(true);
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
-    if (storageReady) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(organizations));
-  }, [organizations, storageReady]);
+    if (!supabase && storageReady) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(organizations));
+  }, [organizations, storageReady, supabase]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      setAuthChecked(true);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
+    return () => data.subscription.unsubscribe();
+  }, [supabase]);
+
+  useEffect(() => {
+    if (!supabase || !user) {
+      if (supabase) setSyncing(false);
+      return;
+    }
+    let active = true;
+    setSyncing(true);
+    setSyncError("");
+    supabase.from("organizations").select("*").order("created_at", { ascending: false }).then(({ data, error }) => {
+      if (!active) return;
+      if (error) setSyncError(`Неуспешно зареждане от Supabase: ${error.message}`);
+      else setOrganizations((data ?? []).map(fromDatabase));
+      setSyncing(false);
+    });
+    return () => { active = false; };
+  }, [supabase, user]);
 
   const filtered = useMemo(() => {
     const value = query.trim().toLocaleLowerCase("bg");
@@ -68,22 +103,47 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
     setEditing({ ...organization, standards: [...organization.standards] });
   }
 
-  function saveOrganization(event: React.FormEvent<HTMLFormElement>) {
+  async function saveOrganization(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editing) return;
     if (!editing.name.trim() || !editing.uic.trim()) return setError("Името на фирмата и ЕИК са задължителни.");
     if (!editing.standards.length) return setError("Изберете поне един ISO стандарт.");
-    setOrganizations((current) => current.some((item) => item.id === editing.id)
-      ? current.map((item) => item.id === editing.id ? editing : item)
-      : [editing, ...current]);
+    const exists = organizations.some((item) => item.id === editing.id);
+    if (supabase && user) {
+      setSyncing(true);
+      setSyncError("");
+      const payload = toDatabase(editing, user.id);
+      const result = exists
+        ? await supabase.from("organizations").update(payload).eq("id", editing.id).select().single()
+        : await supabase.from("organizations").insert(payload).select().single();
+      setSyncing(false);
+      if (result.error) {
+        setError(`Supabase отказа записа: ${result.error.message}`);
+        return;
+      }
+      const saved = fromDatabase(result.data);
+      setOrganizations((current) => exists ? current.map((item) => item.id === saved.id ? saved : item) : [saved, ...current]);
+      setEditing(null);
+      return;
+    }
+    setOrganizations((current) => exists ? current.map((item) => item.id === editing.id ? editing : item) : [editing, ...current]);
     setEditing(null);
   }
 
-  function removeOrganization(organization: Organization) {
+  async function removeOrganization(organization: Organization) {
     if (window.confirm(`Сигурни ли сте, че искате да изтриете „${organization.name}“?`)) {
+      if (supabase && user) {
+        setSyncing(true);
+        const { error } = await supabase.from("organizations").delete().eq("id", organization.id);
+        setSyncing(false);
+        if (error) return setSyncError(`Supabase отказа изтриването: ${error.message}`);
+      }
       setOrganizations((current) => current.filter((item) => item.id !== organization.id));
     }
   }
+
+  if (supabase && !authChecked) return <LoadingState />;
+  if (supabase && !user) return <LoginPanel supabase={supabase} />;
 
   return <>
     <Section id="dashboard" title="Табло" description="Общ поглед върху клиентите, готовността и критичните действия.">
@@ -96,8 +156,14 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
       <div className="mt-5 rounded border border-line bg-white p-4 shadow-soft">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-ink">Готовност по организации</h3>
-          <button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-3 py-2 text-sm font-medium text-white hover:bg-blue-700" onClick={openNew} type="button"><Plus className="h-4 w-4" />Нов клиент</button>
+          <div className="flex items-center gap-2">
+            {supabase ? <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700"><Cloud className="h-4 w-4" />Supabase</span> : <span className="text-xs font-medium text-amber-700">Локален режим</span>}
+            {supabase ? <button aria-label="Изход" className="focus-ring grid h-9 w-9 place-items-center rounded border border-line text-slate-600 hover:bg-panel" onClick={() => supabase.auth.signOut()} title="Изход" type="button"><LogOut className="h-4 w-4" /></button> : null}
+            <button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-3 py-2 text-sm font-medium text-white hover:bg-blue-700" onClick={openNew} type="button"><Plus className="h-4 w-4" />Нов клиент</button>
+          </div>
         </div>
+        {syncError ? <p className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{syncError}</p> : null}
+        {syncing ? <p className="mb-4 inline-flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Синхронизиране със Supabase...</p> : null}
         {organizations.length ? <div className="space-y-4">{organizations.map((organization) => <div key={organization.id}>
           <div className="mb-1 flex items-center justify-between gap-3 text-sm"><span className="font-medium text-ink">{organization.name}</span><span className="text-slate-500">{organization.readiness}%</span></div>
           <div className="h-2 rounded bg-slate-100"><div className="h-2 rounded bg-brand" style={{ width: `${organization.readiness}%` }} /></div>
@@ -155,4 +221,87 @@ export function OrganizationWorkspace({ activeDocuments, overdueTasks }: { activ
 
 function Field({ label, children }: { label: string; children: React.ReactElement<{ className?: string }> }) {
   return <label className="grid gap-1.5 text-sm font-medium text-ink">{label}{cloneElement(children, { className: `focus-ring h-10 w-full rounded border border-line bg-white px-3 text-sm font-normal outline-none ${children.props.className ?? ""}` })}</label>;
+}
+
+type OrganizationRow = {
+  id: string;
+  name: string;
+  uic: string;
+  address: string | null;
+  manager: string | null;
+  contact_email: string | null;
+  employees_count: number;
+  activity: string | null;
+  sites_count: number;
+  standards: IsoStandardCode[] | null;
+  status: OrganizationStatus;
+  readiness_percent: number;
+  next_audit_date: string | null;
+};
+
+function fromDatabase(value: OrganizationRow): Organization {
+  return {
+    id: value.id,
+    name: value.name,
+    uic: value.uic,
+    address: value.address ?? "",
+    manager: value.manager ?? "",
+    contactEmail: value.contact_email ?? "",
+    employees: value.employees_count ?? 0,
+    activity: value.activity ?? "",
+    sites: value.sites_count ?? 1,
+    standards: value.standards ?? [],
+    status: value.status,
+    readiness: value.readiness_percent ?? 0,
+    nextAuditDate: value.next_audit_date ?? ""
+  };
+}
+
+function toDatabase(value: Organization, ownerId: string) {
+  return {
+    id: value.id,
+    owner_id: ownerId,
+    name: value.name.trim(),
+    uic: value.uic.trim(),
+    address: value.address.trim() || null,
+    manager: value.manager.trim() || null,
+    contact_email: value.contactEmail.trim() || null,
+    employees_count: value.employees,
+    activity: value.activity.trim() || null,
+    sites_count: value.sites,
+    standards: value.standards,
+    status: value.status,
+    readiness_percent: value.readiness,
+    next_audit_date: value.nextAuditDate || null
+  };
+}
+
+function LoadingState() {
+  return <div className="grid min-h-[55vh] place-items-center"><div className="flex items-center gap-2 text-sm text-slate-600"><Loader2 className="h-5 w-5 animate-spin text-action" />Свързване със Supabase...</div></div>;
+}
+
+function LoginPanel({ supabase }: { supabase: SupabaseClient }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function signIn(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (error) setError("Невалиден имейл или парола.");
+  }
+
+  return <div className="grid min-h-[70vh] place-items-center py-8">
+    <form className="w-full max-w-md rounded border border-line bg-white p-6 shadow-soft" onSubmit={signIn}>
+      <div className="mb-6 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded bg-brand text-white"><LogIn className="h-5 w-5" /></span><div><h2 className="font-semibold text-ink">Вход в IMS платформата</h2><p className="text-sm text-slate-500">Достъп само за администратора</p></div></div>
+      <div className="grid gap-4"><Field label="Имейл"><input autoComplete="email" autoFocus required type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></Field><Field label="Парола"><input autoComplete="current-password" required type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></Field></div>
+      {error ? <p className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+      <button className="focus-ring mt-5 inline-flex h-10 w-full items-center justify-center gap-2 rounded bg-action px-4 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60" disabled={loading} type="submit">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}Вход</button>
+      <p className="mt-4 text-xs leading-5 text-slate-500">Акаунтът се създава предварително в Supabase Authentication. В приложението няма публична регистрация.</p>
+    </form>
+  </div>;
 }

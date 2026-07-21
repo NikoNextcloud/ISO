@@ -54,6 +54,7 @@ create table public.organizations (
   employees_count integer not null default 0 check (employees_count >= 0),
   activity text,
   sites_count integer not null default 1 check (sites_count >= 0),
+  standards public.iso_standard_code[] not null default '{}',
   certification_body text,
   status public.organization_status not null default 'draft',
   readiness_percent integer not null default 0 check (readiness_percent between 0 and 100),
