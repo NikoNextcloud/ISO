@@ -39,9 +39,9 @@ type NormalizedExportData = {
 };
 
 export type IsoExportConfig = {
-  code: "ISO 9001" | "ISO 14001" | "ISO 27001" | "ISO 45001" | "ISO 50001" | "ISO 9-20-27";
+  code: "ISO 9001" | "ISO 14001" | "ISO 27001" | "ISO 45001" | "ISO 50001" | "ISO 9-20-27" | "ISO 9-14-45" | "ISO 9-14";
   edition: string;
-  templateDirectory: "iso9001" | "iso14001" | "iso27001" | "iso45001" | "iso50001" | "iso902027";
+  templateDirectory: "iso9001" | "iso14001" | "iso27001" | "iso45001" | "iso50001" | "iso902027" | "iso91445" | "iso914";
   logoMode: WordLogoReplacement["mode"];
   logoSourceHashes?: string[];
   pathCompanyNames?: string[];
@@ -235,6 +235,14 @@ export const iso902027ExportConfig: IsoExportConfig = {
   edition: "ISO 9001:2015 + ISO/IEC 20000-1:2018 + ISO/IEC 27001",
   templateDirectory: "iso902027",
   logoMode: "matching-images",
+  logoSourceHashes: [
+    "5d6ddef4a69e19b9942a8dc3b8d5bfa9c0805a735004f497e7d625b83b95e181",
+    "49aa6c5955c6d29145e39b076e84039b0ca316c7a28143abdc0cc5ff7406519d",
+    "95a48d29c98862d39248d41e6d7293dcebdb56ad8f4cf054680f2552058fb05e",
+    "b4286d493f38d5bd4fb50697b255246343344fbd5ae159b857fe4629c3bd5a68",
+    "4c20acdfc6bc6cef282b146632036dc475b4f345990b9603772b96e6c3ea13d8",
+    "826dbf2a3330b726110fec7a46e7f7d7ca975b546d118e0552dbfb713492ac46"
+  ],
   pathCompanyNames: [
     "ST Al. Atanassov", "Atanassov 24-08-2020", "Atanassov 21-08-2020",
     "ATanassov 2020", "Atanassov 2020", "Атанасов 2020", "Atanassov"
@@ -272,6 +280,71 @@ export const iso902027ExportConfig: IsoExportConfig = {
   }
 };
 
+export const iso91445ExportConfig: IsoExportConfig = {
+  code: "ISO 9-14-45",
+  edition: "ISO 9001:2015 + ISO 14001:2015 + ISO 45001:2018",
+  templateDirectory: "iso91445",
+  logoMode: "matching-images",
+  pathCompanyNames: [
+    "ВИТОША ГАЗ ЕООД", "Витоша газ ЕООД", "ВИТОША ГАЗ", "Витоша газ",
+    "Техно проект пласт ООД", "Техно проект пласт"
+  ],
+  replacements: (data) => {
+    const companyVariants = [
+      "„„Витоша газ“  ЕООД", "„Витоша газ “  ЕООД",
+      "„Витоша газ“  ЕООД", "„ВИТОША ГАЗ“  ЕООД",
+      "„Витоша газ“ ЕООД", '"Витоша газ" ЕООД',
+      "“Витоша газ” ЕООД", "Витоша газ ЕООД",
+      "Техно проект пласт ООД"
+    ];
+    return [
+      ...companyVariants.map((variant) => [variant, data.companyName] as [string, string]),
+      ...replacementsWhen(data.manager, (manager) => [["Иван Георгиев", manager]]),
+      ...replacementsWhen(data.address, (address) => [
+        ["гр. София-Банкя,  Адрес: ул. Слънчев бряг №42", address],
+        ["гр. София-Банкя, Адрес: ул. Слънчев бряг №42", address],
+        ["гр. София-Банкя", address],
+        ["Адрес:", ""],
+        ["ул. Слънчев бряг 42", ""],
+        ["1000 София, ул. „Любляна“ 4", ""]
+      ]),
+      ...replacementsWhen(data.uic, (uic) => [["204192799", uic]]),
+      ...replacementsWhen(data.email, (email) => [["e.vasileva@vitoshagas.com", email]]),
+      ...replacementsWhen(data.phone, (phone) => [["+359/895668474", phone]]),
+      ...replacementsWhen(data.effectiveDate, (date) => [["07.11.2019", formatDate(date)]])
+    ];
+  }
+};
+
+export const iso914ExportConfig: IsoExportConfig = {
+  code: "ISO 9-14",
+  edition: "ISO 9001:2015 + ISO 14001:2015",
+  templateDirectory: "iso914",
+  logoMode: "matching-images",
+  pathCompanyNames: ["Братя Панчеви ООД", "Братя Панчеви"],
+  replacements: (data) => {
+    const companyVariants = [
+      "„Братя Панчеви“ ООД", "“Братя Панчеви” ООД", '"Братя Панчеви" ООД',
+      "Братя Панчеви ООД", "„БРАТЯ ПАНЧЕВИ“ ООД", "БРАТЯ ПАНЧЕВИ ООД"
+    ];
+    return [
+      ...companyVariants.map((variant) => [variant, data.companyName] as [string, string]),
+      ...replacementsWhen(data.manager, (manager) => [
+        ["Ташко Панчев", manager], ["ТАШКО ПАНЧЕВ", manager.toLocaleUpperCase("bg")]
+      ]),
+      ...replacementsWhen(data.address, (address) => [
+        ["Дружеството е с адрес на управление: Ямбол, Община: Ямбол", `Дружеството е с адрес на управление: ${address}`],
+        ["Населено място: гр. Ямбол, п.к. 8600 ул. Малко Търново № 4", `Адрес: ${address}`]
+      ]),
+      ...replacementsWhen(data.effectiveDate, (date) => [
+        ["06.02.2023", formatDate(date)],
+        ["2023г.", `${new Date(`${date}T00:00:00`).getFullYear()}г.`],
+        ["2023 г.", `${new Date(`${date}T00:00:00`).getFullYear()} г.`]
+      ])
+    ];
+  }
+};
+
 export async function authorizeIsoExport(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -291,7 +364,8 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
 
   const logoData = decodeLogo(data.logoPngDataUrl);
   const logo = logoData ? { data: logoData, mode: config.logoMode, sourceHashes: config.logoSourceHashes } satisfies WordLogoReplacement : undefined;
-  const replacements = [...baseReplacements(data), ...config.replacements(data)];
+  const pathTitleReplacements = (config.pathCompanyNames ?? []).map((source) => [source, data.companyName] as [string, string]);
+  const replacements = [...baseReplacements(data), ...pathTitleReplacements, ...config.replacements(data)];
   const folder = `${config.code} - ${safeName(data.companyName)}`;
   const entries: ZipEntry[] = [];
 

@@ -186,14 +186,27 @@ export function replaceWordText(docx: Buffer, replacements: Array<[string, strin
   const sourceEntries = readZip(docx);
   const logoTargets = logo?.mode === "header-images" ? headerImageTargets(sourceEntries) : new Set<string>();
   const sourceHashes = new Set(logo?.sourceHashes ?? []);
+  if (logo?.mode === "matching-images") {
+    sourceEntries.forEach((entry) => {
+      if (entry.name.startsWith("word/media/") && sourceHashes.has(createHash("sha256").update(entry.data).digest("hex"))) logoTargets.add(entry.name);
+    });
+  }
+  const orderedReplacements = [...replacements].sort((a, b) => b[0].length - a[0].length);
   const entries = sourceEntries.map((entry) => {
-    const isPng = entry.name.toLocaleLowerCase("en").endsWith(".png");
-    const hashMatches = logo?.mode === "matching-images" && isPng && sourceHashes.has(createHash("sha256").update(entry.data).digest("hex"));
-    if (logo && isPng && (logoTargets.has(entry.name) || hashMatches)) return { ...entry, data: logo.data };
-    if (!entry.name.startsWith("word/") || !entry.name.endsWith(".xml")) return entry;
+    if (logo && logoTargets.has(entry.name)) return { ...entry, data: logo.data };
+    if (logo && entry.name === "[Content_Types].xml" && logoTargets.size) {
+      return { ...entry, data: Buffer.from(addPngContentTypeOverrides(entry.data.toString("utf8"), logoTargets), "utf8") };
+    }
+    const isWordXml = entry.name.startsWith("word/") && entry.name.endsWith(".xml");
+    const isDocumentPropertyXml = entry.name.startsWith("docProps/") && entry.name.endsWith(".xml");
+    if (!isWordXml && !isDocumentPropertyXml) return entry;
     let xml = entry.data.toString("utf8");
-    for (const [source, replacement] of replacements.sort((a, b) => b[0].length - a[0].length)) {
+    for (const [source, replacement] of orderedReplacements) {
       if (!source || source === replacement) continue;
+      if (isDocumentPropertyXml) {
+        xml = replaceDocumentTitleProperty(xml, source, replacement);
+        continue;
+      }
       for (;;) {
         const result = replaceOnceAcrossTextNodes(xml, source, replacement);
         xml = result.xml;
@@ -203,4 +216,29 @@ export function replaceWordText(docx: Buffer, replacements: Array<[string, strin
     return { ...entry, data: Buffer.from(xml, "utf8") };
   });
   return writeZip(entries);
+}
+
+function replaceDocumentTitleProperty(xml: string, source: string, replacement: string) {
+  const pattern = /<((?:dc:(?:title|subject)|cp:(?:keywords|category|contentStatus)))(\b[^>]*)>([\s\S]*?)<\/\1>/gi;
+  return xml.replace(pattern, (match, tag: string, attributes: string, value: string) => {
+    const decoded = decodeXml(value);
+    if (!decoded.includes(source)) return match;
+    return `<${tag}${attributes}>${encodeXml(decoded.replaceAll(source, replacement))}</${tag}>`;
+  });
+}
+
+function addPngContentTypeOverrides(xml: string, targets: Set<string>) {
+  let result = xml;
+  for (const target of targets) {
+    const partName = `/${target}`;
+    const override = `<Override PartName="${encodeXml(partName)}" ContentType="image/png"/>`;
+    const existing = new RegExp(`<Override\\b(?=[^>]*\\bPartName="${escapeRegExp(partName)}")[^>]*/>`, "gi");
+    if (existing.test(result)) result = result.replace(existing, override);
+    else result = result.replace(/<\/Types>\s*$/i, `${override}</Types>`);
+  }
+  return result;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
