@@ -6,14 +6,14 @@ import { replaceWordText, writeZip, type WordLogoReplacement, type ZipEntry } fr
 
 export type IsoExportRequest = {
   companyName: string;
-  uic: string;
+  uic?: string;
   address?: string;
   manager?: string;
   representative?: string;
   contactName?: string;
   email?: string;
   phone?: string;
-  employees?: number;
+  employees?: number | string;
   activity?: string;
   scope?: string;
   effectiveDate?: string;
@@ -21,15 +21,147 @@ export type IsoExportRequest = {
   logoPngDataUrl?: string;
 };
 
-type NormalizedExportData = Omit<Required<IsoExportRequest>, "logoPngDataUrl"> & { logoPngDataUrl: string };
+type NormalizedExportData = {
+  companyName: string;
+  uic: string;
+  address: string;
+  manager: string;
+  representative: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  employees?: number;
+  activity: string;
+  scope: string;
+  effectiveDate: string;
+  version: string;
+  logoPngDataUrl: string;
+};
 
 export type IsoExportConfig = {
-  code: "ISO 27001" | "ISO 45001";
+  code: "ISO 9001" | "ISO 14001" | "ISO 27001" | "ISO 45001" | "ISO 50001" | "ISO 9-20-27";
   edition: string;
-  templateDirectory: "iso27001" | "iso45001";
+  templateDirectory: "iso9001" | "iso14001" | "iso27001" | "iso45001" | "iso50001" | "iso902027";
   logoMode: WordLogoReplacement["mode"];
   logoSourceHashes?: string[];
+  pathCompanyNames?: string[];
   replacements: (data: NormalizedExportData) => Array<[string, string]>;
+};
+
+export const iso9001ExportConfig: IsoExportConfig = {
+  code: "ISO 9001",
+  edition: "ISO 9001:2015",
+  templateDirectory: "iso9001",
+  logoMode: "matching-images",
+  pathCompanyNames: ["Артпласт ЕООД", "Артпласт", "ДЕОН-БГ ЕООД", "ДЕОН-БГ"],
+  replacements: (data) => {
+    const result: Array<[string, string]> = [
+      ["“Артпласт” ЕООД", data.companyName], ["“Артпласт“ ЕООД", data.companyName],
+      ["„Артпласт” ЕООД", data.companyName], ["„Артпласт“ ЕООД", data.companyName],
+      ["\"Артпласт\" ЕООД", data.companyName], ["Артпласт ЕООД", data.companyName],
+      ["ДЕОН-БГ ЕООД", data.companyName]
+    ];
+    result.push(
+      ...replacementsWhen(data.manager, (manager) => [
+        ["ТОДОР ТОДОРОВ", manager.toLocaleUpperCase("bg")], ["Тодор Тодоров", manager]
+      ]),
+      ...replacementsWhen(data.address, (address) => [["гр. Ямбол", address]]),
+      ...replacementsWhen(data.scope, (scope) => [
+        ["Печат и обработващи операции върху текстил, производство и търговия на текстил и текстилни изделия. Щампиране, обагряне, избелване, боядисване и конфекциониране на текстилни изделия и продукти. Внос, износ и търговия със синтетични и щапелни влакна.", scope]
+      ]),
+      ...replacementsWhen(data.effectiveDate, (date) => {
+        const formatted = formatDate(date);
+        return [
+          ["11.05.2020г.", `${formatted} г.`], ["11.05.2022г.", `${formatted} г.`],
+          ["27.05.2020г.", `${formatted} г.`], ["27.05.2020г", `${formatted} г.`],
+          ["27.05.2020 г.", `${formatted} г.`], ["27.05.2020.", `${formatted}.`],
+          ["27.05.2020", formatted], ["16.06. 2020 г.", `${formatted} г.`],
+          ["16.06.2020 г.", `${formatted} г.`], ["16.06.2020", formatted],
+          ["17.06.2020 г.", `${formatted} г.`], ["17.06.2020г.", `${formatted} г.`],
+          ["07.04.2020г.", `${formatted} г.`], ["02.05.2018", formatted],
+          ["Май, 2022 г.", formatMonthYear(date)]
+        ];
+      }),
+      ...replacementsWhen(data.version, (version) => [
+        ["Версия: 001", `Версия: ${version}`], ["Версия:1", `Версия:${version}`], ["Версия 01", `Версия ${version}`],
+        ["версия 01", `версия ${version}`]
+      ])
+    );
+    return result;
+  }
+};
+
+export const iso50001ExportConfig: IsoExportConfig = {
+  code: "ISO 50001",
+  edition: "ISO 50001:2018",
+  templateDirectory: "iso50001",
+  logoMode: "matching-images",
+  pathCompanyNames: ["ТС КЪНСТРАКШЪН ЕООД", "ТС Кънстракшън ЕООД", "КОТЕК ЕООД"],
+  replacements: (data) => {
+    const result: Array<[string, string]> = [
+      ["ТС КЪНСТРАКШЪН ЕООД", data.companyName], ["ТС Кънстракшън ЕООД", data.companyName],
+      ["КОТЕК ЕООД", data.companyName]
+    ];
+    result.push(
+      ...replacementsWhen(data.manager, (manager) => [
+        ["ТЕОДОР ЕВГЕНИЕВ СЕРАФИМОВ", manager.toLocaleUpperCase("bg")],
+        ["Теодор Евгениев Серафимов", manager], ["Теодор Серафимов", manager],
+        ["Тодор Серафимов", manager], ["Борислав Тачев", manager]
+      ]),
+      ...replacementsWhen(data.representative, (representative) => [["Невена Кръстева", representative]]),
+      ...replacementsWhen(data.activity, (activity) => [
+        ["Последните няколко години предприятието насочва все повече дейността си към предоставяне на строителни услуги, в областта на жилищно и нежилищно строителство на сгради в региона на София. Компанията разполага с набор от транспортни средства и техника за извършване на дейностите в обхвата на сертификация.", `${data.companyName} извършва основна дейност: ${activity}.`]
+      ]),
+      ...replacementsWhen(data.effectiveDate, (date) => {
+        const formatted = formatDate(date);
+        return [
+          ["09.06.2024г.", `${formatted} г.`], ["09.06.2024г", `${formatted} г.`],
+          ["09.06.2025г.", `${formatted} г.`], ["09.06.2025г", `${formatted} г.`], ["09.06.2025", formatted],
+          ["27.06.2024г.", `${formatted} г.`], ["27.06.2024г", `${formatted} г.`],
+          ["04.07.2024г", `${formatted} г.`], ["10.07.2024г.", `${formatted} г.`],
+          ["10.07.2025г", `${formatted} г.`], ["10.07.2026г.", `${formatted} г.`], ["10.07.2026г", `${formatted} г.`],
+          ["10.09.2025г.", `${formatted} г.`], ["10.09.2025г", `${formatted} г.`],
+          ["11.12.2025г.", `${formatted} г.`], ["11.12.2025г", `${formatted} г.`],
+          ["13.12.2025 г.", `${formatted} г.`], ["13.12.2025г.", `${formatted} г.`], ["13.12.2025г", `${formatted} г.`]
+        ];
+      }),
+      ...replacementsWhen(data.version, (version) => [
+        ["Версия No.1.0", `Версия No.${version}`], ["Версия №1.0", `Версия №${version}`],
+        ["Версия: 01", `Версия: ${version}`], ["Версия 01", `Версия ${version}`],
+        ["версия 01", `версия ${version}`]
+      ])
+    );
+    return result;
+  }
+};
+
+export const iso14001ExportConfig: IsoExportConfig = {
+  code: "ISO 14001",
+  edition: "ISO 14001:2015",
+  templateDirectory: "iso14001",
+  logoMode: "matching-images",
+  pathCompanyNames: ["БРАМАНД ЕООД", "БРАМАНД"],
+  replacements: (data) => [
+    ...replacementsWhen(data.address, (address) => [
+      ["БРАМАНД  ЕООД е основана на 16.07.2009 г. в гр. София.", `${data.companyName} е организация с адрес: ${address}.`],
+      ["БРАМАНД ЕООД е основана на 16.07.2009 г. в гр. София.", `${data.companyName} е организация с адрес: ${address}.`],
+      ["гр. София", address]
+    ]),
+    ...replacementsWhen(data.activity, (activity) => [
+      ["Производство на алуминиеви профили. Обработка, огъване и разкрояване на алуминиеви профили, производство и търговия на осветителни тела.", activity]
+    ]),
+    ["БРАМАНД  ЕООД", data.companyName], ["БРАМАНД ЕООД", data.companyName],
+    ["„БРАМАНД“ ЕООД", data.companyName], ["\"БРАМАНД\" ЕООД", data.companyName],
+    ...replacementsWhen(data.manager, (manager) => [["ДЕЯН МАНДАЛИЕВ", manager.toLocaleUpperCase("bg")], ["Деян Мандалиев", manager]]),
+    ...replacementsWhen(data.effectiveDate, (date) => [
+      ["01.03.2021г.", `${formatDate(date)} г.`], ["01.03.2021г", `${formatDate(date)} г.`],
+      ["01.03.2021", formatDate(date)], ["20 21 г.", `${new Date(`${date}T00:00:00`).getFullYear()} г.`]
+    ]),
+    ...replacementsWhen(data.version, (version) => [
+      ["Версия : 00 1", `Версия: ${version}`], ["Версия : 001", `Версия: ${version}`],
+      ["Версия 01", `Версия ${version}`], ["Вариант : 1", `Вариант: ${version}`], ["Вариант:1", `Вариант: ${version}`]
+    ])
+  ]
 };
 
 export const iso27001ExportConfig: IsoExportConfig = {
@@ -37,20 +169,32 @@ export const iso27001ExportConfig: IsoExportConfig = {
   edition: "ISO/IEC 27001:2022",
   templateDirectory: "iso27001",
   logoMode: "header-images",
+  pathCompanyNames: ["БМ ПРОТЕКШЪН ЕООД", "БМ ПРОТЕКШЪН"],
   replacements: (data) => {
     const companyVariants = [
       "“БМ ПРОТЕКШЪН“ ЕООД", "“БМ ПРОТЕКШЪН” ЕООД", "„БМ ПРОТЕКШЪН“ ЕООД", "„БМ ПРОТЕКШЪН” ЕООД",
       "\"БМ ПРОТЕКШЪН\" ЕООД", "БМ ПРОТЕКШЪН ЕООД"
     ];
-    const result: Array<[string, string]> = [
-      ["Владимира  Емилова", data.manager || "Управител"], ["Владимира Емилова", data.manager || "Управител"],
-      ["Георги Златков Драмов", data.manager || "Управител"], ["Лилия Каменова - Тошева", data.manager || "Управител"],
-      ["13.01.2025", formatDate(data.effectiveDate)], ["02.05.2025", formatDate(data.effectiveDate)],
-      ["Версия № 2", `Версия № ${data.version}`], ["Версия № 1", `Версия № ${data.version}`],
-      ["Област: София (столица), Община: Столична", `Адрес: ${data.address || "Не е посочен"}`],
-      ["Населено място: гр. София, п.к. 1404", ""], ["р-н Триадица", ""], ["бул./ул. Силиврия № 5 офис 1", ""],
-      ["“БМ ПРОТЕКШЪН“ ЕООД е организация предоставяща услуги, свързани с охрана на имущество на физически и юридически лица. Сигнално охранителна дейност. Охрана на обекти – недвижими имоти. Охрана на мероприятия.", `${data.companyName} е организация с основна дейност: ${data.activity || "не е посочена"}.`]
-    ];
+    const result: Array<[string, string]> = [];
+    result.push(
+      ...replacementsWhen(data.manager, (manager) => [
+        ["Владимира  Емилова", manager], ["Владимира Емилова", manager],
+        ["Георги Златков Драмов", manager], ["Лилия Каменова - Тошева", manager]
+      ]),
+      ...replacementsWhen(data.effectiveDate, (date) => [
+        ["13.01.2025", formatDate(date)], ["02.05.2025", formatDate(date)]
+      ]),
+      ...replacementsWhen(data.version, (version) => [
+        ["Версия № 2", `Версия № ${version}`], ["Версия № 1", `Версия № ${version}`]
+      ]),
+      ...replacementsWhen(data.address, (address) => [
+        ["Област: София (столица), Община: Столична", `Адрес: ${address}`],
+        ["Населено място: гр. София, п.к. 1404", ""], ["р-н Триадица", ""], ["бул./ул. Силиврия № 5 офис 1", ""]
+      ]),
+      ...replacementsWhen(data.activity, (activity) => [
+        ["“БМ ПРОТЕКШЪН“ ЕООД е организация предоставяща услуги, свързани с охрана на имущество на физически и юридически лица. Сигнално охранителна дейност. Охрана на обекти – недвижими имоти. Охрана на мероприятия.", `${data.companyName} е организация с основна дейност: ${activity}.`]
+      ])
+    );
     companyVariants.forEach((variant) => result.push([variant, data.companyName]));
     return result;
   }
@@ -61,20 +205,71 @@ export const iso45001ExportConfig: IsoExportConfig = {
   edition: "ISO 45001",
   templateDirectory: "iso45001",
   logoMode: "matching-images",
+  pathCompanyNames: ["СМП ПЛЕВЕН ЕООД", "СМП ПЛЕВЕН"],
   logoSourceHashes: ["007edd5d4b66e5f0e100381691d731eba96a4b9199cc5a95cbdfd7ed23c7e4a8"],
   replacements: (data) => [
     ["„ СМП ПЛЕВЕН“ ЕООД", data.companyName], ["„СМП ПЛЕВЕН“ ЕООД", data.companyName],
     ["\"СМП ПЛЕВЕН\" ЕООД", data.companyName], ["СМП ПЛЕВЕН ЕООД", data.companyName],
-    ["машинно-ремонтни дейности", data.activity || "дейността на организацията"],
-    ["монтажна, машинно-ремонтна и строително-монтажна дейност", data.activity || "дейността на организацията"],
-    ["АДЕЛИЯ ТОМОВА ТОДОРОВА", data.manager || "УПРАВИТЕЛ"], ["Аделия Томова Тодорова", data.manager || "Управител"],
-    ["гр. Плевен", data.address || "Адресът не е посочен"],
-    ["12 януари 2026 г.", formatLongDate(data.effectiveDate)], ["12 януари 2026 г", formatLongDate(data.effectiveDate)],
-    ["12.01.2026 г.", formatDate(data.effectiveDate)], ["12.01.2026г.", formatDate(data.effectiveDate)],
-    ["12.01.2026", formatDate(data.effectiveDate)], ["23.02.2026", formatDate(data.effectiveDate)],
-    ["Версия: 01", `Версия: ${data.version}`], ["Версия: 0 1", `Версия: ${data.version}`],
-    ["рев . ном .: 0 1", `рев. ном.: ${data.version}`], ["рев. ном.: 0 1", `рев. ном.: ${data.version}`]
+    ...replacementsWhen(data.activity, (activity) => [
+      ["машинно-ремонтни дейности", activity],
+      ["монтажна, машинно-ремонтна и строително-монтажна дейност", activity]
+    ]),
+    ...replacementsWhen(data.manager, (manager) => [
+      ["АДЕЛИЯ ТОМОВА ТОДОРОВА", manager.toLocaleUpperCase("bg")], ["Аделия Томова Тодорова", manager]
+    ]),
+    ...replacementsWhen(data.address, (address) => [["гр. Плевен", address]]),
+    ...replacementsWhen(data.effectiveDate, (date) => [
+      ["12 януари 2026 г.", formatLongDate(date)], ["12 януари 2026 г", formatLongDate(date)],
+      ["12.01.2026 г.", formatDate(date)], ["12.01.2026г.", formatDate(date)],
+      ["12.01.2026", formatDate(date)], ["23.02.2026", formatDate(date)]
+    ]),
+    ...replacementsWhen(data.version, (version) => [
+      ["Версия: 01", `Версия: ${version}`], ["Версия: 0 1", `Версия: ${version}`],
+      ["рев . ном .: 0 1", `рев. ном.: ${version}`], ["рев. ном.: 0 1", `рев. ном.: ${version}`]
+    ])
   ]
+};
+
+export const iso902027ExportConfig: IsoExportConfig = {
+  code: "ISO 9-20-27",
+  edition: "ISO 9001:2015 + ISO/IEC 20000-1:2018 + ISO/IEC 27001",
+  templateDirectory: "iso902027",
+  logoMode: "matching-images",
+  pathCompanyNames: [
+    "ST Al. Atanassov", "Atanassov 24-08-2020", "Atanassov 21-08-2020",
+    "ATanassov 2020", "Atanassov 2020", "Атанасов 2020", "Atanassov"
+  ],
+  replacements: (data) => {
+    const companyVariants = [
+      '"С-ТРЪСТ ГРУП" ЕООД', '„С-ТРЪСТ ГРУП“ ЕООД', '“С-ТРЪСТ ГРУП“ ЕООД',
+      'С-ТРЪСТ ГРУП" ЕООД', '“С -ТРЪСТ ГРУП“ ЕООД',
+      '"С-ТРЪСТ ГРУП',
+      "C-TRUST GROUP LTD", "C-TRUST GROUP Ltd",
+      '“С&T България” ЕООД', '„S&T България” ЕООД', '“С&Т България” ЕООД',
+      '“C&T България” ЕООД', 'С &T България” ЕООД', "С&Т България ЕООД",
+      '„С&Т България“ ЕООД', '„С & Т България“ ЕООД', '„C&T България“ ЕООД',
+      '“S&T България” ЕООД', '„С&T България” ЕООД', '„С&T БЪЛГАРИЯ“ ЕООД',
+      "С&T БЪЛГАРИЯ ЕООД", '“C&T България” ООД', '„С&Т България” ЕООД',
+      '„S&T БЪЛГАРИЯ” ЕООД', '„С&T България“ ЕООД', 'С &T БЪЛГАРИЯ” ЕООД',
+      "С & Т България ЕООД", '„C&T България” ЕООД', '“S&T България” ООД',
+      '“С&T България” ООД', "С &T БЪЛГАРИЯ ЕООД", "S&T България ЕООД",
+      '„С &T БЪЛГАРИЯ” ЕООД', 'C&T България” ЕООД', '„С&Т БЪЛГАРИЯ” ЕООД',
+      'S & T  България” ООД', 'C&T България“ ЕООД', "С &T България ЕООД",
+      '“С&Т БЪЛГАРИЯ” ЕООД', '„С&T БЪЛГАРИЯ” ЕООД', "С &Т България ЕООД",
+      '“S&T БЪЛГАРИЯ” ЕООД', '“С &Т България” ЕООД', "С&Т  България  ЕООД",
+      "С & Т България  ЕООД", 'S&T България” ЕООД', '„С &T  България” ЕООД',
+      'С&T България” ЕООД', '„С &T България” ЕООД', 'С & T  България” ЕООД',
+      'С&Т България“ ЕООД', '„С&T България” ООД', "С &T България  еоод",
+      "С&T България ЕООД", "C & T  България ЕООД", '“С&T БЪЛГАРИЯ” ЕООД',
+      'C & T  България” ЕООД', 'C &T България” ЕООД', "S&T Bulgaria EOOD",
+      "S&T BULGARIA EOOD", "S & T Bulgaria EOOD", "S   &   T Bulgaria EOOD",
+      'СиТ  България“  ЕООД', '„СиТ България“  ЕООД',
+      "С-ТРЪСТ ГРУП", "C-TRUST GROUP", "S&T България", "С&T България",
+      "С&Т България", "C&T България", "С &T България", "С & Т България",
+      "C &T България", "C & T България", "S&T Bulgaria", "СиТ България"
+    ];
+    return companyVariants.map((variant) => [variant, data.companyName]);
+  }
 };
 
 export async function authorizeIsoExport(request: NextRequest) {
@@ -103,14 +298,18 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
   for (const file of files) {
     let content = await fs.readFile(file.absolute);
     if (file.relative.toLocaleLowerCase("bg").endsWith(".docx")) content = replaceWordText(content, replacements, logo);
-    entries.push({ name: path.posix.join(folder, file.relative), data: content });
+    const outputPath = replaceCompanyInPath(file.relative, config.pathCompanyNames, data.companyName);
+    entries.push({ name: path.posix.join(folder, outputPath), data: content });
   }
 
   const summary = [
-    `${config.edition} - комплект документация`, `Организация: ${data.companyName}`, `ЕИК: ${data.uic}`,
-    `Адрес: ${data.address || "Не е посочен"}`, `Управител: ${data.manager || "Не е посочен"}`,
+    `${config.edition} - комплект документация`, `Организация: ${data.companyName}`,
+    ...summaryWhen(data.uic, "ЕИК"), ...summaryWhen(data.address, "Адрес"), ...summaryWhen(data.manager, "Управител"),
+    ...summaryWhen(data.activity, "Основна дейност"), ...summaryWhen(data.scope, "Обхват"),
+    ...summaryWhen(data.effectiveDate ? formatDate(data.effectiveDate) : "", "Дата на влизане в сила"),
+    ...summaryWhen(data.version, "Версия"),
     `Дата на генериране: ${formatDate(new Date().toISOString().slice(0, 10))}`, `Документи: ${files.length}`,
-    `Фирмено лого: ${logoData ? "заменено в шаблоните" : "запазено от оригиналните шаблони"}`
+    `Фирмено лого: ${logoData ? "заменено в приложимите шаблони" : "оригиналните изображения са запазени"}`
   ].join("\r\n");
   entries.unshift({ name: path.posix.join(folder, "README - ДАННИ ЗА ЕКСПОРТА.txt"), data: Buffer.from(summary, "utf8") });
 
@@ -123,25 +322,27 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
 
 function normalizeRequest(body: IsoExportRequest): NormalizedExportData {
   return {
-    companyName: requiredText(body.companyName, "Име на фирмата"), uic: requiredText(body.uic, "ЕИК", 30),
+    companyName: requiredText(body.companyName, "Име на фирмата"), uic: optionalText(body.uic, 30),
     address: optionalText(body.address), manager: optionalText(body.manager), representative: optionalText(body.representative),
     contactName: optionalText(body.contactName), email: optionalText(body.email, 200), phone: optionalText(body.phone, 80),
-    employees: Math.max(0, Number(body.employees) || 0), activity: optionalText(body.activity, 1000), scope: optionalText(body.scope, 1500),
-    effectiveDate: optionalText(body.effectiveDate, 20) || new Date().toISOString().slice(0, 10),
-    version: optionalText(body.version, 20) || "1", logoPngDataUrl: optionalText(body.logoPngDataUrl, 5_800_000)
+    employees: optionalNumber(body.employees), activity: optionalText(body.activity, 1000), scope: optionalText(body.scope, 1500),
+    effectiveDate: optionalText(body.effectiveDate, 20), version: optionalText(body.version, 20),
+    logoPngDataUrl: optionalText(body.logoPngDataUrl, 5_800_000)
   };
 }
 
 function baseReplacements(data: NormalizedExportData): Array<[string, string]> {
-  return [
-    ["{{COMPANY_NAME}}", data.companyName], ["{{UIC}}", data.uic], ["{{ADDRESS}}", data.address || "Не е посочен"],
-    ["{{MANAGER}}", data.manager || "Не е посочен"], ["{{REPRESENTATIVE}}", data.representative || data.manager || "Не е посочен"],
-    ["{{CONTACT_NAME}}", data.contactName || data.representative || data.manager || "Не е посочен"],
-    ["{{EMAIL}}", data.email || "Не е посочен"], ["{{PHONE}}", data.phone || "Не е посочен"],
-    ["{{EMPLOYEES}}", String(data.employees || 0)], ["{{ACTIVITY}}", data.activity || "Не е посочена"],
-    ["{{SCOPE}}", data.scope || data.activity || "Не е посочен"], ["{{EFFECTIVE_DATE}}", formatDate(data.effectiveDate)],
+  const result: Array<[string, string]> = [["{{COMPANY_NAME}}", data.companyName]];
+  const optionalValues: Array<[string, string]> = [
+    ["{{UIC}}", data.uic], ["{{ADDRESS}}", data.address], ["{{MANAGER}}", data.manager],
+    ["{{REPRESENTATIVE}}", data.representative], ["{{CONTACT_NAME}}", data.contactName],
+    ["{{EMAIL}}", data.email], ["{{PHONE}}", data.phone], ["{{ACTIVITY}}", data.activity],
+    ["{{SCOPE}}", data.scope], ["{{EFFECTIVE_DATE}}", data.effectiveDate ? formatDate(data.effectiveDate) : ""],
     ["{{VERSION}}", data.version]
   ];
+  optionalValues.forEach(([placeholder, value]) => { if (value) result.push([placeholder, value]); });
+  if (data.employees !== undefined) result.push(["{{EMPLOYEES}}", String(data.employees)]);
+  return result;
 }
 
 function decodeLogo(value: string) {
@@ -175,6 +376,20 @@ function optionalText(value: unknown, max = 500) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+function optionalNumber(value: unknown) {
+  if (value === "" || value === null || value === undefined) return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : undefined;
+}
+
+function replacementsWhen(value: string, build: (value: string) => Array<[string, string]>) {
+  return value ? build(value) : [];
+}
+
+function summaryWhen(value: string, label: string) {
+  return value ? [`${label}: ${value}`] : [];
+}
+
 function formatDate(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   return match ? `${match[3]}.${match[2]}.${match[1]}` : value;
@@ -187,6 +402,26 @@ function formatLongDate(value: string) {
   return `${Number(match[3])} ${months[Number(match[2]) - 1]} ${match[1]} г.`;
 }
 
+function formatMonthYear(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  const months = ["Януари", "Февруари", "Март", "Април", "Май", "Юни", "Юли", "Август", "Септември", "Октомври", "Ноември", "Декември"];
+  return `${months[Number(match[2]) - 1]}, ${match[1]} г.`;
+}
+
 function safeName(value: string) {
   return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 70) || "Организация";
+}
+
+function replaceCompanyInPath(value: string, sourceNames: string[] | undefined, companyName: string) {
+  let result = value;
+  const replacement = safeName(companyName);
+  for (const source of [...new Set(sourceNames ?? [])].sort((a, b) => b.length - a.length)) {
+    result = result.replace(new RegExp(escapeRegExp(source), "giu"), () => replacement);
+  }
+  return result;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

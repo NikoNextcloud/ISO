@@ -2,8 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp, Loader2, ShieldCheck } from "lucide-react";
+import { Iso9001ExportWorkspace } from "@/components/iso9001-export-workspace";
+import { Iso14001ExportWorkspace } from "@/components/iso14001-export-workspace";
 import { Iso27001ExportWorkspace } from "@/components/iso27001-export-workspace";
 import { Iso45001ExportWorkspace } from "@/components/iso45001-export-workspace";
+import { Iso50001ExportWorkspace } from "@/components/iso50001-export-workspace";
+import { Iso902027ExportWorkspace } from "@/components/iso902027-export-workspace";
 import { Section } from "@/components/ui";
 import { documents as localDocuments, standards } from "@/lib/mock-data";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
@@ -11,12 +15,19 @@ import type { DocumentStatus, IsoStandardCode } from "@/lib/types";
 
 type DocumentMetricRow = { standards: IsoStandardCode[]; status: DocumentStatus };
 type StandardMetric = { documents: number; approvedPercent: number };
+type StandardCardCode = IsoStandardCode | "ISO 9-20-27";
 
-const templateCounts: Partial<Record<IsoStandardCode, number>> = { "ISO 27001": 84, "ISO 45001": 60 };
+const integratedStandard = {
+  code: "ISO 9-20-27" as const,
+  title: "Интегрирана система за качество, услуги и информационна сигурност",
+  scope: "ISO 9001, ISO/IEC 20000-1 и ISO/IEC 27001 в обща система."
+};
+const standardCards = [...standards, integratedStandard];
+const templateCounts: Partial<Record<StandardCardCode, number>> = { "ISO 9001": 31, "ISO 14001": 12, "ISO 27001": 84, "ISO 45001": 60, "ISO 50001": 24, "ISO 9-20-27": 271 };
 
 export function StandardsWorkspace() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const [openStandard, setOpenStandard] = useState<IsoStandardCode | null>(null);
+  const [openStandard, setOpenStandard] = useState<StandardCardCode | null>(null);
   const [metrics, setMetrics] = useState(() => calculateMetrics(localDocuments));
   const [loading, setLoading] = useState(Boolean(supabase));
   const [error, setError] = useState("");
@@ -34,9 +45,9 @@ export function StandardsWorkspace() {
 
   return <Section id="standards" title="Стандарти" description="Реални данни от документите в Supabase и наличните системни шаблони.">
     {error ? <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-      {standards.map((standard) => {
-        const available = standard.code === "ISO 27001" || standard.code === "ISO 45001";
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      {standardCards.map((standard) => {
+        const available = true;
         const selected = available && openStandard === standard.code;
         const metric = metrics[standard.code] ?? { documents: 0, approvedPercent: 0 };
         const templates = templateCounts[standard.code] ?? 0;
@@ -54,16 +65,24 @@ export function StandardsWorkspace() {
       })}
     </div>
     {loading ? <p className="mt-4 inline-flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Обновяване на реалната статистика...</p> : null}
+    {openStandard === "ISO 9001" ? <div className="mt-7 border-t border-line pt-7"><Iso9001ExportWorkspace /></div> : null}
+    {openStandard === "ISO 14001" ? <div className="mt-7 border-t border-line pt-7"><Iso14001ExportWorkspace /></div> : null}
     {openStandard === "ISO 27001" ? <div className="mt-7 border-t border-line pt-7"><Iso27001ExportWorkspace /></div> : null}
     {openStandard === "ISO 45001" ? <div className="mt-7 border-t border-line pt-7"><Iso45001ExportWorkspace /></div> : null}
+    {openStandard === "ISO 50001" ? <div className="mt-7 border-t border-line pt-7"><Iso50001ExportWorkspace /></div> : null}
+    {openStandard === "ISO 9-20-27" ? <div className="mt-7 border-t border-line pt-7"><Iso902027ExportWorkspace /></div> : null}
   </Section>;
 }
 
 function calculateMetrics(rows: DocumentMetricRow[]) {
-  return standards.reduce((result, standard) => {
+  const result = standards.reduce((metrics, standard) => {
     const related = rows.filter((document) => document.standards?.includes(standard.code));
     const approved = related.filter((document) => document.status === "approved").length;
-    result[standard.code] = { documents: related.length, approvedPercent: related.length ? Math.round((approved / related.length) * 100) : 0 };
-    return result;
-  }, {} as Record<IsoStandardCode, StandardMetric>);
+    metrics[standard.code] = { documents: related.length, approvedPercent: related.length ? Math.round((approved / related.length) * 100) : 0 };
+    return metrics;
+  }, {} as Record<StandardCardCode, StandardMetric>);
+  const integrated = rows.filter((document) => document.standards?.includes("ISO 9001") && document.standards.includes("ISO 27001"));
+  const approved = integrated.filter((document) => document.status === "approved").length;
+  result["ISO 9-20-27"] = { documents: integrated.length, approvedPercent: integrated.length ? Math.round((approved / integrated.length) * 100) : 0 };
+  return result;
 }

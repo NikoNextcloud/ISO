@@ -133,11 +133,11 @@ function encodeXml(value: string) {
 }
 
 function replaceOnceAcrossTextNodes(xml: string, source: string, replacement: string) {
-  const pattern = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g;
+  const pattern = /<((?:w:(?:t|delText|instrText)|a:t))\b[^>]*>([\s\S]*?)<\/\1>/g;
   const nodes: { start: number; end: number; text: string }[] = [];
   for (let match = pattern.exec(xml); match; match = pattern.exec(xml)) {
-    const relative = match[0].indexOf(match[1]);
-    nodes.push({ start: match.index + relative, end: match.index + relative + match[1].length, text: decodeXml(match[1]) });
+    const relative = match[0].indexOf(">") + 1;
+    nodes.push({ start: match.index + relative, end: match.index + relative + match[2].length, text: decodeXml(match[2]) });
   }
   const joined = nodes.map((node) => node.text).join("");
   const sourceStart = joined.indexOf(source);

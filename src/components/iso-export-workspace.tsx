@@ -8,7 +8,7 @@ import { storageErrorMessage } from "@/lib/storage-errors";
 import type { Organization, OrganizationHistoryEntry } from "@/lib/types";
 
 export type IsoExportWorkspaceConfig = {
-  code: "ISO 27001" | "ISO 45001";
+  code: "ISO 9001" | "ISO 14001" | "ISO 27001" | "ISO 45001" | "ISO 50001" | "ISO 9-20-27";
   edition: string;
   apiPath: string;
   templateCount: number;
@@ -16,13 +16,13 @@ export type IsoExportWorkspaceConfig = {
   description: string;
   scopeLabel: string;
   scopePlaceholder: string;
-  logoAspect: number;
+  logoAspect?: number;
   contents: string[];
 };
 
 type ExportForm = {
   companyName: string; uic: string; address: string; manager: string; representative: string;
-  contactName: string; email: string; phone: string; employees: number; activity: string;
+  contactName: string; email: string; phone: string; employees: number | ""; activity: string;
   scope: string; effectiveDate: string; version: string;
 };
 
@@ -34,7 +34,7 @@ type OrganizationRow = {
 
 const emptyForm: ExportForm = {
   companyName: "", uic: "", address: "", manager: "", representative: "", contactName: "", email: "", phone: "",
-  employees: 0, activity: "", scope: "", effectiveDate: new Date().toISOString().slice(0, 10), version: "1"
+  employees: "", activity: "", scope: "", effectiveDate: "", version: ""
 };
 
 export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfig }) {
@@ -84,7 +84,7 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
     setForm((current) => ({ ...current,
       companyName: organization.name, uic: organization.uic, address: organization.address ?? "", manager: organization.manager ?? "",
       representative: organization.representative ?? organization.manager ?? "", contactName: organization.contact_name ?? "",
-      email: organization.contact_email ?? "", phone: organization.contact_phone ?? "", employees: organization.employees_count ?? 0,
+      email: organization.contact_email ?? "", phone: organization.contact_phone ?? "", employees: organization.employees_count ?? "",
       activity: organization.activity ?? "", scope: organization.activity ?? ""
     }));
   }
@@ -94,7 +94,7 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
     setError("");
     try {
       if (file.size > 8_000_000) throw new Error("Логото е твърде голямо. Изберете изображение до 8 MB.");
-      setLogoPngDataUrl(await prepareLogo(file, config.logoAspect));
+      setLogoPngDataUrl(await prepareLogo(file, config.logoAspect ?? 1));
       setLogoName(file.name);
     } catch (reason) {
       setLogoPngDataUrl(""); setLogoName("");
@@ -130,7 +130,8 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
 
   async function recordExportHistory(blob: Blob, filename: string) {
     const eventDate = new Date().toISOString();
-    const description = `Генерирана е пълна ${config.code} система, версия ${form.version}, с дата на влизане в сила ${formatDate(form.effectiveDate)}${logoPngDataUrl ? ", с фирмено лого" : ""}.`;
+    const details = [form.version ? `версия ${form.version}` : "", form.effectiveDate ? `дата на влизане в сила ${formatDate(form.effectiveDate)}` : "", logoPngDataUrl ? "с фирмено лого" : ""].filter(Boolean);
+    const description = `Генерирана е пълна ${config.code} система${details.length ? `, ${details.join(", ")}` : ""}.`;
     const entry: OrganizationHistoryEntry = { id: makeId(), organizationId: selectedId, eventType: "system_exported", description, eventDate, fileName: filename, fileSize: blob.size };
     if (supabase && user) {
       const filePath = `${selectedId}/systems/${Date.now()}-${safeFileName(filename)}`;
@@ -160,17 +161,17 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
         <div className="grid gap-4 p-5 sm:grid-cols-2">
           <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2">Фирма от регистъра<select className="focus-ring h-10 rounded border border-line bg-white px-3 text-sm font-normal outline-none" disabled={loading} onChange={(event) => selectOrganization(event.target.value)} value={selectedId}><option value="">Ръчно попълване</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name} · ЕИК {organization.uic}</option>)}</select></label>
           <ExportField label="Име на фирмата *"><input required value={form.companyName} onChange={(event) => setForm({ ...form, companyName: event.target.value })} /></ExportField>
-          <ExportField label="ЕИК *"><input required value={form.uic} onChange={(event) => setForm({ ...form, uic: event.target.value })} /></ExportField>
+          <ExportField label="ЕИК"><input value={form.uic} onChange={(event) => setForm({ ...form, uic: event.target.value })} /></ExportField>
           <ExportField label="Адрес"><input value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></ExportField>
           <ExportField label="Управител"><input value={form.manager} onChange={(event) => setForm({ ...form, manager: event.target.value })} /></ExportField>
           <ExportField label="Представител на ръководството"><input value={form.representative} onChange={(event) => setForm({ ...form, representative: event.target.value })} /></ExportField>
           <ExportField label="Лице за контакт"><input value={form.contactName} onChange={(event) => setForm({ ...form, contactName: event.target.value })} /></ExportField>
           <ExportField label="Имейл"><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></ExportField>
           <ExportField label="Телефон"><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></ExportField>
-          <ExportField label="Брой служители"><input min="0" type="number" value={form.employees} onChange={(event) => setForm({ ...form, employees: Number(event.target.value) })} /></ExportField>
-          <ExportField label="Дата на влизане в сила"><input required type="date" value={form.effectiveDate} onChange={(event) => setForm({ ...form, effectiveDate: event.target.value })} /></ExportField>
-          <ExportField label="Версия"><input required value={form.version} onChange={(event) => setForm({ ...form, version: event.target.value })} /></ExportField>
-          <div className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2"><span>Фирмено лого</span><div className="flex min-h-20 items-center gap-3 rounded border border-dashed border-slate-300 bg-slate-50 p-3">{logoPngDataUrl ? <img alt="Фирмено лого" className="h-14 w-24 object-contain" src={logoPngDataUrl} /> : <span className="grid h-14 w-24 place-items-center rounded bg-white text-slate-400"><ImagePlus className="h-5 w-5" /></span>}<div className="min-w-0 flex-1"><label className="focus-ring inline-flex cursor-pointer items-center gap-2 rounded border border-line bg-white px-3 py-2 text-sm font-medium text-ink hover:bg-slate-50"><ImagePlus className="h-4 w-4" />{logoName ? "Смени логото" : "Качи лого"}<input accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => void chooseLogo(event.target.files?.[0])} type="file" /></label><p className="mt-1 truncate text-xs font-normal text-slate-500">{logoName || "PNG, JPG или WebP · до 8 MB"}</p></div>{logoPngDataUrl ? <button aria-label="Премахни логото" className="focus-ring grid h-8 w-8 place-items-center rounded text-slate-500 hover:bg-white hover:text-red-600" onClick={() => { setLogoPngDataUrl(""); setLogoName(""); }} title="Премахни логото" type="button"><X className="h-4 w-4" /></button> : null}</div></div>
+          <ExportField label="Брой служители"><input min="0" type="number" value={form.employees} onChange={(event) => setForm({ ...form, employees: event.target.value === "" ? "" : Number(event.target.value) })} /></ExportField>
+          <ExportField label="Дата на влизане в сила"><input type="date" value={form.effectiveDate} onChange={(event) => setForm({ ...form, effectiveDate: event.target.value })} /></ExportField>
+          <ExportField label="Версия"><input value={form.version} onChange={(event) => setForm({ ...form, version: event.target.value })} /></ExportField>
+          {config.logoAspect ? <div className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2"><span>Фирмено лого</span><div className="flex min-h-20 items-center gap-3 rounded border border-dashed border-slate-300 bg-slate-50 p-3">{logoPngDataUrl ? <img alt="Фирмено лого" className="h-14 w-24 object-contain" src={logoPngDataUrl} /> : <span className="grid h-14 w-24 place-items-center rounded bg-white text-slate-400"><ImagePlus className="h-5 w-5" /></span>}<div className="min-w-0 flex-1"><label className="focus-ring inline-flex cursor-pointer items-center gap-2 rounded border border-line bg-white px-3 py-2 text-sm font-medium text-ink hover:bg-slate-50"><ImagePlus className="h-4 w-4" />{logoName ? "Смени логото" : "Качи лого"}<input accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => void chooseLogo(event.target.files?.[0])} type="file" /></label><p className="mt-1 truncate text-xs font-normal text-slate-500">{logoName || "PNG, JPG или WebP · до 8 MB"}</p></div>{logoPngDataUrl ? <button aria-label="Премахни логото" className="focus-ring grid h-8 w-8 place-items-center rounded text-slate-500 hover:bg-white hover:text-red-600" onClick={() => { setLogoPngDataUrl(""); setLogoName(""); }} title="Премахни логото" type="button"><X className="h-4 w-4" /></button> : null}</div></div> : null}
           <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2">Основна дейност<textarea className="focus-ring min-h-24 rounded border border-line bg-white p-3 text-sm font-normal outline-none" value={form.activity} onChange={(event) => setForm({ ...form, activity: event.target.value })} /></label>
           <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2">{config.scopeLabel}<textarea className="focus-ring min-h-24 rounded border border-line bg-white p-3 text-sm font-normal outline-none" placeholder={config.scopePlaceholder} value={form.scope} onChange={(event) => setForm({ ...form, scope: event.target.value })} /></label>
           {error ? <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p> : null}
@@ -178,7 +179,7 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
         <div className="flex justify-end border-t border-line px-5 py-4"><button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60" disabled={generating || loading} type="submit">{generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{generating ? `Генериране на ${config.templateCount} файла...` : "Генерирай ZIP система"}</button></div>
       </form>
 
-      <aside className="h-fit rounded border border-line bg-white p-4 shadow-soft"><div className="mb-4 flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded bg-sky-50 text-action"><FileArchive className="h-4 w-4" /></span><div><h3 className="text-sm font-semibold text-ink">Комплект {config.code}</h3><p className="text-xs text-slate-500">{config.edition}</p></div></div><div className="space-y-3 text-sm text-slate-600">{config.contents.map((item, index) => <p className="flex items-center gap-2" key={item}>{index === 0 ? <FolderTree className="h-4 w-4 text-slate-400" /> : index === 1 ? <ShieldCheck className="h-4 w-4 text-slate-400" /> : <Archive className="h-4 w-4 text-slate-400" />}{item}</p>)}</div><div className="mt-4 border-t border-line pt-4"><p className="text-2xl font-semibold text-ink">{config.templateCount}</p><p className="text-xs text-slate-500">редактируеми файла в един ZIP архив</p></div><p className="mt-4 text-xs leading-5 text-slate-500">ZIP архивът се изтегля и се пази в „Генерирани системи“ за избраната фирма. Каченото лого заменя фирменото лого в приложимите Word шаблони.</p></aside>
+      <aside className="h-fit rounded border border-line bg-white p-4 shadow-soft"><div className="mb-4 flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded bg-sky-50 text-action"><FileArchive className="h-4 w-4" /></span><div><h3 className="text-sm font-semibold text-ink">Комплект {config.code}</h3><p className="text-xs text-slate-500">{config.edition}</p></div></div><div className="space-y-3 text-sm text-slate-600">{config.contents.map((item, index) => <p className="flex items-center gap-2" key={item}>{index === 0 ? <FolderTree className="h-4 w-4 text-slate-400" /> : index === 1 ? <ShieldCheck className="h-4 w-4 text-slate-400" /> : <Archive className="h-4 w-4 text-slate-400" />}{item}</p>)}</div><div className="mt-4 border-t border-line pt-4"><p className="text-2xl font-semibold text-ink">{config.templateCount}</p><p className="text-xs text-slate-500">редактируеми файла в един ZIP архив</p></div><p className="mt-4 text-xs leading-5 text-slate-500">ZIP архивът се изтегля и се пази в „Генерирани системи“ за избраната фирма.{config.logoAspect ? " Каченото лого заменя фирменото лого в приложимите Word шаблони." : ""}</p></aside>
     </div>}
   </div>;
 }
