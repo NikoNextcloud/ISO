@@ -8,7 +8,14 @@ export function Iso9001ExportWorkspace() {
     title: "ISO 9001 система", description: "Генерирайте комплект документация за управление на качеството и избраната фирма.",
     scopeLabel: "Обхват на СУК", scopePlaceholder: "Например: производство, търговия, услуги, проектиране и административно управление...",
     logoAspect: 3.5,
-    requiredFields: ["Име", "Адрес", "Управител", "Дата", "Версия"], optionalFields: ["Обхват"],
-    contents: ["Наръчник по качество", "11 процедури и 8 основни формуляра", "Одитни планове, отчети, обучения и управление на риска"]
+    contents: ["Наръчник по качество", "11 процедури и 8 основни формуляра", "Одитни планове, отчети, обучения и управление на риска"],
+    fields: [
+      { key: "companyName", required: true, hint: "заглавия, папки, колонтитули" },
+      { key: "address", required: true, hint: "гр. Ямбол" },
+      { key: "manager", required: true, hint: "Тодор Тодоров" },
+      { key: "effectiveDate", required: true },
+      { key: "version", required: true },
+      { key: "scope", hint: "обхват на сертификация" }
+    ]
   }} />;
 }

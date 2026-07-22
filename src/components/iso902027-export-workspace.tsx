@@ -13,7 +13,13 @@ export function Iso902027ExportWorkspace() {
     scopeLabel: "Обхват на интегрираната система",
     scopePlaceholder: "Например: разработване, доставка и поддръжка на информационни системи и управлявани услуги...",
     logoAspect: 5.9,
-    requiredFields: ["Име", "ЕИК", "Управител"], optionalFields: ["Представител", "Имейл"],
-    contents: ["Интегриран наръчник и политики", "Процедури, инструкции, регистри и работни документи", "ISO 9001, ISO/IEC 20000-1 и ISO/IEC 27001 в един ZIP архив"]
+    contents: ["Интегриран наръчник и политики", "Процедури, инструкции, регистри и работни документи", "ISO 9001, ISO/IEC 20000-1 и ISO/IEC 27001 в един ZIP архив"],
+    fields: [
+      { key: "companyName", required: true, hint: "заглавия, папки, колонтитули" },
+      { key: "uic", required: true, hint: "ЕИК на С-ТРЪСТ ГРУП / България" },
+      { key: "manager", required: true, hint: "Злати Петров / Станимир Николов" },
+      { key: "representative", hint: "Васил Минев" },
+      { key: "email", hint: "snt@snt.bg" }
+    ]
   }} />;
 }

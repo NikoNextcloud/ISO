@@ -8,7 +8,14 @@ export function Iso45001ExportWorkspace() {
     title: "ISO 45001 система", description: "Генерирайте пълен комплект документация за здраве и безопасност при работа и избраната фирма.",
     scopeLabel: "Обхват на СУЗБУТ", scopePlaceholder: "Например: производство, монтаж, ремонтни дейности и административно управление...",
     logoAspect: 3.7,
-    requiredFields: ["Име", "Адрес", "Управител", "Дата", "Версия"], optionalFields: ["Дейност"],
-    contents: ["Оригинална папкова структура", "Наръчник и 31 формуляра", "Процедури, подготовка и одит"]
+    contents: ["Оригинална папкова структура", "Наръчник и 31 формуляра", "Процедури, подготовка и одит"],
+    fields: [
+      { key: "companyName", required: true, hint: "заглавия, папки, колонтитули" },
+      { key: "address", required: true, hint: "гр. Плевен" },
+      { key: "manager", required: true, hint: "Аделия Томова Тодорова" },
+      { key: "effectiveDate", required: true },
+      { key: "version", required: true },
+      { key: "activity", hint: "основна дейност на фирмата" }
+    ]
   }} />;
 }

@@ -13,7 +13,15 @@ export function Iso91445ExportWorkspace() {
     scopeLabel: "Обхват на интегрираната система",
     scopePlaceholder: "Например: производство, доставка и сервиз на изделия в съответствие с изискванията за качество, околна среда и безопасност...",
     logoAspect: 3.5,
-    requiredFields: ["Име", "ЕИК", "Адрес", "Управител", "Дата"], optionalFields: ["Имейл", "Телефон"],
-    contents: ["Интегриран наръчник и политики", "Процедури, формуляри и работни документи", "ISO 9001, ISO 14001 и ISO 45001 в един ZIP архив"]
+    contents: ["Интегриран наръчник и политики", "Процедури, формуляри и работни документи", "ISO 9001, ISO 14001 и ISO 45001 в един ZIP архив"],
+    fields: [
+      { key: "companyName", required: true, hint: "заглавия, папки, колонтитули" },
+      { key: "uic", required: true, hint: "204192799" },
+      { key: "address", required: true, hint: "гр. София-Банкя" },
+      { key: "manager", required: true, hint: "Иван Георгиев" },
+      { key: "email", hint: "e.vasileva@vitoshagas.com" },
+      { key: "phone", hint: "+359/895668474" },
+      { key: "effectiveDate", required: true }
+    ]
   }} />;
 }

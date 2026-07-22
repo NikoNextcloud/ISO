@@ -8,7 +8,14 @@ export function Iso14001ExportWorkspace() {
     title: "ISO 14001 система", description: "Генерирайте комплект документация за управление на околната среда и избраната фирма.",
     scopeLabel: "Обхват на СУОС", scopePlaceholder: "Например: производство, складова дейност, транспорт и административно управление...",
     logoAspect: 3.5,
-    requiredFields: ["Име", "Адрес", "Управител", "Дата", "Версия"], optionalFields: ["Дейност"],
-    contents: ["Наръчник за управление на околната среда", "10 процедури по околна среда", "Корици и контролни данни"]
+    contents: ["Наръчник за управление на околната среда", "10 процедури по околна среда", "Корици и контролни данни"],
+    fields: [
+      { key: "companyName", required: true, hint: "заглавия, папки, колонтитули" },
+      { key: "address", required: true, hint: "гр. София" },
+      { key: "manager", required: true, hint: "Деян Мандалиев" },
+      { key: "effectiveDate", required: true },
+      { key: "version", required: true },
+      { key: "activity", hint: "основна дейност на фирмата" }
+    ]
   }} />;
 }

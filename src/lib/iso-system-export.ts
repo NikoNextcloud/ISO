@@ -276,7 +276,15 @@ export const iso902027ExportConfig: IsoExportConfig = {
       "С&Т България", "C&T България", "С &T България", "С & Т България",
       "C &T България", "C & T България", "S&T Bulgaria", "СиТ България"
     ];
-    return companyVariants.map((variant) => [variant, data.companyName]);
+    return [
+      ...companyVariants.map((variant) => [variant, data.companyName] as [string, string]),
+      ...replacementsWhen(data.manager, (manager) => [
+        ["Станимир Николов", manager], ["Злати Петров", manager]
+      ]),
+      ...replacementsWhen(data.representative, (representative) => [["Васил Минев", representative]]),
+      ...replacementsWhen(data.uic, (uic) => [["831131023", uic], ["202755117", uic]]),
+      ...replacementsWhen(data.email, (email) => [["snt@snt.bg", email]])
+    ];
   }
 };
 

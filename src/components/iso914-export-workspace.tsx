@@ -13,11 +13,16 @@ export function Iso914ExportWorkspace() {
     scopeLabel: "Обхват на интегрираната система",
     scopePlaceholder: "Например: производство и доставка на изделия в съответствие с изискванията за качество и околна среда...",
     logoAspect: 3.5,
-    requiredFields: ["Име", "Адрес", "Управител", "Дата"], optionalFields: [],
     contents: [
       "Интегриран наръчник, политика и модел на управление",
       "Процедури, формуляри и работни документи",
       "ISO 9001 и ISO 14001 в един ZIP архив"
+    ],
+    fields: [
+      { key: "companyName", required: true, hint: "заглавия, папки, колонтитули" },
+      { key: "address", required: true, hint: "гр. Ямбол" },
+      { key: "manager", required: true, hint: "Ташко Панчев" },
+      { key: "effectiveDate", required: true }
     ]
   }} />;
 }

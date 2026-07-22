@@ -1,11 +1,34 @@
 "use client";
 
-import { cloneElement, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { Archive, Download, FileArchive, FolderTree, ImagePlus, Info, Loader2, ShieldCheck, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { storageErrorMessage } from "@/lib/storage-errors";
 import type { Organization, OrganizationHistoryEntry } from "@/lib/types";
+
+export type ExportFieldKey =
+  | "companyName" | "uic" | "address" | "manager" | "representative"
+  | "contactName" | "email" | "phone" | "employees" | "activity"
+  | "scope" | "effectiveDate" | "version";
+
+export type ExportFieldSpec = { key: ExportFieldKey; required?: boolean; hint?: string };
+
+const FIELD_META: Record<ExportFieldKey, { label: string; type: "text" | "email" | "number" | "date" | "textarea"; fullWidth?: boolean }> = {
+  companyName: { label: "Име на фирмата", type: "text", fullWidth: true },
+  uic: { label: "ЕИК", type: "text" },
+  address: { label: "Адрес", type: "text" },
+  manager: { label: "Управител", type: "text" },
+  representative: { label: "Представител на ръководството", type: "text" },
+  contactName: { label: "Лице за контакт", type: "text" },
+  email: { label: "Имейл", type: "email" },
+  phone: { label: "Телефон", type: "text" },
+  employees: { label: "Брой служители", type: "number" },
+  effectiveDate: { label: "Дата на влизане в сила", type: "date" },
+  version: { label: "Версия", type: "text" },
+  activity: { label: "Основна дейност", type: "textarea", fullWidth: true },
+  scope: { label: "Обхват", type: "textarea", fullWidth: true }
+};
 
 export type IsoExportWorkspaceConfig = {
   code: "ISO 9001" | "ISO 14001" | "ISO 27001" | "ISO 45001" | "ISO 50001" | "ISO 9-20-27" | "ISO 9-14-45" | "ISO 9-14";
@@ -17,9 +40,8 @@ export type IsoExportWorkspaceConfig = {
   scopeLabel: string;
   scopePlaceholder: string;
   logoAspect?: number;
-  requiredFields: string[];
-  optionalFields: string[];
   contents: string[];
+  fields: ExportFieldSpec[];
 };
 
 type ExportForm = {
@@ -105,14 +127,21 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
   }
 
   async function generate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError(""); setGenerating(true);
+    event.preventDefault(); setError("");
+    const missing = config.fields.filter((spec) => spec.required && String(form[spec.key] ?? "").trim() === "");
+    if (missing.length) {
+      setError(`Попълнете задължителните полета: ${missing.map((spec) => fieldLabel(spec.key)).join(", ")}.`);
+      return;
+    }
+    setGenerating(true);
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (supabase) {
         const { data } = await supabase.auth.getSession();
         if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
       }
-      const response = await fetch(config.apiPath, { method: "POST", headers, body: JSON.stringify({ ...form, logoPngDataUrl }) });
+      const payload = Object.fromEntries(config.fields.map((spec) => [spec.key, form[spec.key]]));
+      const response = await fetch(config.apiPath, { method: "POST", headers, body: JSON.stringify({ ...payload, logoPngDataUrl }) });
       if (!response.ok) {
         const payload = await response.json().catch(() => null) as { error?: string } | null;
         throw new Error(payload?.error ?? "Генерирането не беше успешно.");
@@ -155,6 +184,26 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
 
   const blocked = Boolean(supabase && authChecked && !user);
   const id = config.code.toLowerCase().replace(" ", "");
+  const requiredFields = config.fields.filter((spec) => spec.required).map((spec) => fieldLabel(spec.key));
+  const optionalFields = config.fields.filter((spec) => !spec.required).map((spec) => fieldLabel(spec.key));
+
+  function fieldLabel(key: ExportFieldKey) {
+    return key === "scope" ? config.scopeLabel : FIELD_META[key].label;
+  }
+
+  function renderField(spec: ExportFieldSpec) {
+    const meta = FIELD_META[spec.key];
+    const fullWidth = meta.fullWidth ? " sm:col-span-2" : "";
+    const labelNode = <span>{fieldLabel(spec.key)}{spec.required ? <span className="text-red-600"> *</span> : null}{spec.hint ? <span className="ml-1 text-xs font-normal text-slate-400">· {spec.hint}</span> : null}</span>;
+    const baseInput = "focus-ring h-10 rounded border border-line bg-white px-3 text-sm font-normal outline-none";
+    if (meta.type === "textarea") {
+      return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<textarea className="focus-ring min-h-24 rounded border border-line bg-white p-3 text-sm font-normal outline-none" placeholder={spec.key === "scope" ? config.scopePlaceholder : undefined} required={spec.required} value={form[spec.key] as string} onChange={(event) => setForm({ ...form, [spec.key]: event.target.value })} /></label>;
+    }
+    if (spec.key === "employees") {
+      return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<input className={baseInput} min="0" required={spec.required} type="number" value={form.employees} onChange={(event) => setForm({ ...form, employees: event.target.value === "" ? "" : Number(event.target.value) })} /></label>;
+    }
+    return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<input className={baseInput} required={spec.required} type={meta.type} value={form[spec.key] as string} onChange={(event) => setForm({ ...form, [spec.key]: event.target.value })} /></label>;
+  }
 
   return <div id={`${id}-system`}><div className="mb-4"><h3 className="text-base font-semibold text-ink">{config.title}</h3><p className="mt-1 text-sm text-slate-500">{config.description}</p></div>
     {blocked ? <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Влезте в приложението, за да генерирате защитения комплект документи.</div> : <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
@@ -164,27 +213,15 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
           <div className="min-w-0 space-y-1 text-slate-700">
             <p className="font-semibold text-ink">Какво да попълните за {config.code}</p>
-            <p><span className="font-semibold">Задължителни:</span> {config.requiredFields.join(", ")}</p>
-            <p><span className="font-semibold">По избор:</span> {config.optionalFields.length ? config.optionalFields.join(", ") : "няма"}</p>
+            <p><span className="font-semibold">Задължителни:</span> {requiredFields.join(", ")}</p>
+            <p><span className="font-semibold">По избор:</span> {optionalFields.length ? optionalFields.join(", ") : "няма"}</p>
             <p className="text-xs text-slate-500">Непопълнените полета не променят оригиналното съдържание в документите.</p>
           </div>
         </div>
         <div className="grid gap-4 p-5 sm:grid-cols-2">
           <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2">Фирма от регистъра<select className="focus-ring h-10 rounded border border-line bg-white px-3 text-sm font-normal outline-none" disabled={loading} onChange={(event) => selectOrganization(event.target.value)} value={selectedId}><option value="">Ръчно попълване</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name} · ЕИК {organization.uic}</option>)}</select></label>
-          <ExportField label="Име на фирмата *"><input required value={form.companyName} onChange={(event) => setForm({ ...form, companyName: event.target.value })} /></ExportField>
-          <ExportField label="ЕИК"><input value={form.uic} onChange={(event) => setForm({ ...form, uic: event.target.value })} /></ExportField>
-          <ExportField label="Адрес"><input value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></ExportField>
-          <ExportField label="Управител"><input value={form.manager} onChange={(event) => setForm({ ...form, manager: event.target.value })} /></ExportField>
-          <ExportField label="Представител на ръководството"><input value={form.representative} onChange={(event) => setForm({ ...form, representative: event.target.value })} /></ExportField>
-          <ExportField label="Лице за контакт"><input value={form.contactName} onChange={(event) => setForm({ ...form, contactName: event.target.value })} /></ExportField>
-          <ExportField label="Имейл"><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></ExportField>
-          <ExportField label="Телефон"><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></ExportField>
-          <ExportField label="Брой служители"><input min="0" type="number" value={form.employees} onChange={(event) => setForm({ ...form, employees: event.target.value === "" ? "" : Number(event.target.value) })} /></ExportField>
-          <ExportField label="Дата на влизане в сила"><input type="date" value={form.effectiveDate} onChange={(event) => setForm({ ...form, effectiveDate: event.target.value })} /></ExportField>
-          <ExportField label="Версия"><input value={form.version} onChange={(event) => setForm({ ...form, version: event.target.value })} /></ExportField>
+          {config.fields.map((spec) => renderField(spec))}
           {config.logoAspect ? <div className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2"><span>Фирмено лого</span><div className="flex min-h-20 items-center gap-3 rounded border border-dashed border-slate-300 bg-slate-50 p-3">{logoPngDataUrl ? <img alt="Фирмено лого" className="h-14 w-24 object-contain" src={logoPngDataUrl} /> : <span className="grid h-14 w-24 place-items-center rounded bg-white text-slate-400"><ImagePlus className="h-5 w-5" /></span>}<div className="min-w-0 flex-1"><label className="focus-ring inline-flex cursor-pointer items-center gap-2 rounded border border-line bg-white px-3 py-2 text-sm font-medium text-ink hover:bg-slate-50"><ImagePlus className="h-4 w-4" />{logoName ? "Смени логото" : "Качи лого"}<input accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => void chooseLogo(event.target.files?.[0])} type="file" /></label><p className="mt-1 truncate text-xs font-normal text-slate-500">{logoName || "PNG, JPG или WebP · до 8 MB"}</p></div>{logoPngDataUrl ? <button aria-label="Премахни логото" className="focus-ring grid h-8 w-8 place-items-center rounded text-slate-500 hover:bg-white hover:text-red-600" onClick={() => { setLogoPngDataUrl(""); setLogoName(""); }} title="Премахни логото" type="button"><X className="h-4 w-4" /></button> : null}</div></div> : null}
-          <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2">Основна дейност<textarea className="focus-ring min-h-24 rounded border border-line bg-white p-3 text-sm font-normal outline-none" value={form.activity} onChange={(event) => setForm({ ...form, activity: event.target.value })} /></label>
-          <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2">{config.scopeLabel}<textarea className="focus-ring min-h-24 rounded border border-line bg-white p-3 text-sm font-normal outline-none" placeholder={config.scopePlaceholder} value={form.scope} onChange={(event) => setForm({ ...form, scope: event.target.value })} /></label>
           {error ? <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p> : null}
         </div>
         <div className="flex justify-end border-t border-line px-5 py-4"><button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60" disabled={generating || loading} type="submit">{generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{generating ? `Генериране на ${config.templateCount} файла...` : "Генерирай ZIP система"}</button></div>
@@ -221,7 +258,3 @@ function loadImage(source: string) {
 function makeId() { return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `history-${Date.now()}`; }
 function safeFileName(value: string) { return value.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(0, 140) || "iso-system.zip"; }
 function formatDate(value: string) { return value ? new Intl.DateTimeFormat("bg-BG").format(new Date(`${value}T00:00:00`)) : "не е зададена"; }
-
-function ExportField({ label, children }: { label: string; children: React.ReactElement<{ className?: string }> }) {
-  return <label className="grid gap-1.5 text-sm font-medium text-ink">{label}{cloneElement(children, { className: `focus-ring h-10 rounded border border-line bg-white px-3 text-sm font-normal outline-none ${children.props.className ?? ""}` })}</label>;
-}
