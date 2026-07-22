@@ -113,7 +113,13 @@ export function AiVisualStudio({
       });
       const payload = await response.json().catch(() => null) as { dataUrl?: string; model?: string; error?: string } | null;
       if (!response.ok || !payload?.dataUrl) throw new Error(payload?.error ?? "Cloudflare AI не върна изображение.");
-      const pngDataUrl = await convertToPng(payload.dataUrl);
+      const pngDataUrl = await convertToPng(payload.dataUrl, {
+        title: title.trim() || "AI визуализация",
+        description: prompt.trim(),
+        companyName: companyName.trim(),
+        standard,
+        layout
+      });
       const targetLabel = targets.find((item) => item.sourceHash === targetHash)?.label ?? "Нов PNG файл в ZIP";
       const visual: AiGeneratedVisual = {
         id: makeId(), title: title.trim() || "AI визуализация", type, prompt: prompt.trim(),
@@ -188,8 +194,9 @@ export function AiVisualStudio({
           {targets.map((item) => <option key={item.sourceHash} value={item.sourceHash}>Замени: {item.label}</option>)}
         </select>
       </label>
-      <label className="grid min-w-0 gap-1.5 text-sm font-medium text-ink md:col-span-2">Съдържание и реални данни
+      <label className="grid min-w-0 gap-1.5 text-sm font-medium text-ink md:col-span-2">Съдържание и реални данни на български
         <textarea className="focus-ring min-h-28 w-full min-w-0 rounded border border-line bg-white p-3 text-sm font-normal outline-none" maxLength={1800} value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+        <span className="text-xs font-normal text-slate-500">Заглавието и описанието се изписват върху изображението на български.</span>
       </label>
       {generationError ? <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-normal text-red-700 md:col-span-2">{generationError}</p> : null}
       <div className="flex min-w-0 justify-end md:col-span-2">
@@ -216,20 +223,65 @@ export function AiVisualStudio({
   </section>;
 }
 
-function convertToPng(source: string) {
+function convertToPng(source: string, labels: { title: string; description: string; companyName: string; standard: string; layout: string }) {
   return new Promise<string>((resolve, reject) => {
     const image = new window.Image();
     image.onload = () => {
-      const maxDimension = 1100;
-      const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+      const dimensions = labels.layout === "portrait"
+        ? { width: 900, height: 1200 }
+        : labels.layout === "square"
+          ? { width: 1000, height: 1000 }
+          : { width: 1200, height: 800 };
       const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      canvas.width = dimensions.width;
+      canvas.height = dimensions.height;
       const context = canvas.getContext("2d");
       if (!context) { reject(new Error("Браузърът не успя да обработи AI изображението.")); return; }
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      const padding = Math.round(canvas.width * 0.045);
+      const headerHeight = labels.layout === "portrait" ? 150 : 130;
+      const footerHeight = labels.layout === "portrait" ? 260 : 210;
+      const imageBox = {
+        x: padding,
+        y: headerHeight,
+        width: canvas.width - padding * 2,
+        height: canvas.height - headerHeight - footerHeight
+      };
+      const scale = Math.min(imageBox.width / image.naturalWidth, imageBox.height / image.naturalHeight);
+      const drawWidth = Math.round(image.naturalWidth * scale);
+      const drawHeight = Math.round(image.naturalHeight * scale);
+      context.drawImage(
+        image,
+        imageBox.x + Math.round((imageBox.width - drawWidth) / 2),
+        imageBox.y + Math.round((imageBox.height - drawHeight) / 2),
+        drawWidth,
+        drawHeight
+      );
+
+      context.fillStyle = "#111827";
+      context.font = `700 ${fitFont(context, labels.title, canvas.width - padding * 2, labels.layout === "portrait" ? 34 : 38, 24)}px "Segoe UI", Arial, sans-serif`;
+      context.textBaseline = "top";
+      context.fillText(labels.title, padding, 32);
+      context.fillStyle = "#475569";
+      context.font = `500 ${labels.layout === "portrait" ? 20 : 18}px "Segoe UI", Arial, sans-serif`;
+      context.fillText([labels.companyName, labels.standard].filter(Boolean).join(" · "), padding, 82);
+
+      const footerY = canvas.height - footerHeight;
+      context.strokeStyle = "#cbd5e1";
+      context.lineWidth = 2;
+      context.beginPath();
+      context.moveTo(padding, footerY + 18);
+      context.lineTo(canvas.width - padding, footerY + 18);
+      context.stroke();
+      context.fillStyle = "#0f766e";
+      context.font = `700 ${labels.layout === "portrait" ? 22 : 20}px "Segoe UI", Arial, sans-serif`;
+      context.fillText("Описание", padding, footerY + 38);
+      context.fillStyle = "#334155";
+      context.font = `400 ${labels.layout === "portrait" ? 21 : 19}px "Segoe UI", Arial, sans-serif`;
+      drawWrappedText(context, labels.description, padding, footerY + 78, canvas.width - padding * 2, labels.layout === "portrait" ? 30 : 27, labels.layout === "portrait" ? 6 : 4);
+
       const result = canvas.toDataURL("image/png");
       if (result.length > 4_500_000) { reject(new Error("AI изображението е твърде голямо за документа.")); return; }
       resolve(result);
@@ -237,6 +289,39 @@ function convertToPng(source: string) {
     image.onerror = () => reject(new Error("Cloudflare AI върна невалидно изображение."));
     image.src = source;
   });
+}
+
+function fitFont(context: CanvasRenderingContext2D, text: string, maxWidth: number, start: number, minimum: number) {
+  let size = start;
+  while (size > minimum) {
+    context.font = `700 ${size}px "Segoe UI", Arial, sans-serif`;
+    if (context.measureText(text).width <= maxWidth) break;
+    size -= 1;
+  }
+  return size;
+}
+
+function drawWrappedText(context: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, maxLines: number) {
+  const words = text.replace(/\s+/g, " ").trim().split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (context.measureText(next).width <= maxWidth) line = next;
+    else {
+      if (line) lines.push(line);
+      line = word;
+      if (lines.length === maxLines - 1) break;
+    }
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+  const usedWords = lines.join(" ").split(" ").length;
+  if (usedWords < words.length && lines.length) {
+    let last = lines[lines.length - 1];
+    while (last && context.measureText(`${last}...`).width > maxWidth) last = last.slice(0, -1);
+    lines[lines.length - 1] = `${last.trimEnd()}...`;
+  }
+  lines.forEach((value, index) => context.fillText(value, x, y + index * lineHeight));
 }
 
 function makeId() {

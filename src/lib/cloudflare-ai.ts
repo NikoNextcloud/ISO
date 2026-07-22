@@ -96,7 +96,8 @@ export async function generateCloudflareVisual(input: AiVisualRequest) {
     `Layout: ${input.layout || "landscape"}.`,
     "Use crisp lines, strong visual hierarchy, generous white space and a restrained corporate style.",
     "Do not add a logo, watermark, certification seal or invented numerical results.",
-    "Use Bulgarian labels only when labels are explicitly requested. Keep labels short and legible."
+    "Do not render any text, words, letters or captions inside the image. Use shapes, icons, connectors and neutral numbered markers only.",
+    "The application will add verified Bulgarian Cyrillic titles and descriptions after generation."
   ].filter(Boolean).join(" ");
 
   const response = await fetch(
