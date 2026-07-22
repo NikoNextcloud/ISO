@@ -9,6 +9,11 @@ export type WordLogoReplacement = {
   sourceHashes?: string[];
 };
 
+export type OfficeImageReplacement = {
+  data: Buffer;
+  sourceHash: string;
+};
+
 const CRC_TABLE = Array.from({ length: 256 }, (_, value) => {
   let crc = value;
   for (let bit = 0; bit < 8; bit += 1) crc = (crc & 1) ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
@@ -182,20 +187,29 @@ function headerImageTargets(entries: ZipEntry[]) {
   return targets;
 }
 
-export function replaceWordText(docx: Buffer, replacements: Array<[string, string]>, logo?: WordLogoReplacement) {
+export function replaceWordText(docx: Buffer, replacements: Array<[string, string]>, logo?: WordLogoReplacement, imageReplacements: OfficeImageReplacement[] = []) {
   const sourceEntries = readZip(docx);
   const logoTargets = logo?.mode === "header-images" ? headerImageTargets(sourceEntries) : new Set<string>();
   const sourceHashes = new Set(logo?.sourceHashes ?? []);
+  const replacementByHash = new Map(imageReplacements.map((item) => [item.sourceHash, item.data]));
+  const customImageTargets = new Map<string, Buffer>();
   if (logo?.mode === "matching-images") {
     sourceEntries.forEach((entry) => {
       if (entry.name.startsWith("word/media/") && sourceHashes.has(createHash("sha256").update(entry.data).digest("hex"))) logoTargets.add(entry.name);
     });
   }
+  sourceEntries.forEach((entry) => {
+    if (!entry.name.startsWith("word/media/")) return;
+    const replacement = replacementByHash.get(createHash("sha256").update(entry.data).digest("hex"));
+    if (replacement) customImageTargets.set(entry.name, replacement);
+  });
+  const pngTargets = new Set([...logoTargets, ...customImageTargets.keys()]);
   const orderedReplacements = [...replacements].sort((a, b) => b[0].length - a[0].length);
   const entries = sourceEntries.map((entry) => {
+    if (customImageTargets.has(entry.name)) return { ...entry, data: customImageTargets.get(entry.name)! };
     if (logo && logoTargets.has(entry.name)) return { ...entry, data: logo.data };
-    if (logo && entry.name === "[Content_Types].xml" && logoTargets.size) {
-      return { ...entry, data: Buffer.from(addPngContentTypeOverrides(entry.data.toString("utf8"), logoTargets), "utf8") };
+    if (entry.name === "[Content_Types].xml" && pngTargets.size) {
+      return { ...entry, data: Buffer.from(addPngContentTypeOverrides(entry.data.toString("utf8"), pngTargets), "utf8") };
     }
     const isWordXml = entry.name.startsWith("word/") && entry.name.endsWith(".xml");
     const isDocumentPropertyXml = entry.name.startsWith("docProps/") && entry.name.endsWith(".xml");
@@ -216,6 +230,97 @@ export function replaceWordText(docx: Buffer, replacements: Array<[string, strin
     return { ...entry, data: Buffer.from(xml, "utf8") };
   });
   return writeZip(entries);
+}
+
+export function replaceSpreadsheetText(xlsx: Buffer, replacements: Array<[string, string]>, logo?: WordLogoReplacement, imageReplacements: OfficeImageReplacement[] = []) {
+  const sourceEntries = readZip(xlsx);
+  const logoTargets = new Set<string>();
+  const sourceHashes = new Set(logo?.sourceHashes ?? []);
+  const replacementByHash = new Map(imageReplacements.map((item) => [item.sourceHash, item.data]));
+  const customImageTargets = new Map<string, Buffer>();
+  if (logo?.mode === "matching-images") {
+    sourceEntries.forEach((entry) => {
+      if (entry.name.startsWith("xl/media/") && sourceHashes.has(createHash("sha256").update(entry.data).digest("hex"))) logoTargets.add(entry.name);
+    });
+  }
+  sourceEntries.forEach((entry) => {
+    if (!entry.name.startsWith("xl/media/")) return;
+    const replacement = replacementByHash.get(createHash("sha256").update(entry.data).digest("hex"));
+    if (replacement) customImageTargets.set(entry.name, replacement);
+  });
+  const pngTargets = new Set([...logoTargets, ...customImageTargets.keys()]);
+  const orderedReplacements = [...replacements].sort((a, b) => b[0].length - a[0].length);
+  const entries = sourceEntries.map((entry) => {
+    if (customImageTargets.has(entry.name)) return { ...entry, data: customImageTargets.get(entry.name)! };
+    if (logo && logoTargets.has(entry.name)) return { ...entry, data: logo.data };
+    if (entry.name === "[Content_Types].xml" && pngTargets.size) {
+      return { ...entry, data: Buffer.from(addPngContentTypeOverrides(entry.data.toString("utf8"), pngTargets), "utf8") };
+    }
+    const isSpreadsheetXml = entry.name.startsWith("xl/") && entry.name.endsWith(".xml");
+    const isDocumentPropertyXml = entry.name.startsWith("docProps/") && entry.name.endsWith(".xml");
+    if (!isSpreadsheetXml && !isDocumentPropertyXml) return entry;
+
+    let xml = entry.data.toString("utf8");
+    for (const [source, replacement] of orderedReplacements) {
+      if (!source || source === replacement) continue;
+      if (isDocumentPropertyXml) {
+        xml = replaceDocumentTitleProperty(xml, source, replacement);
+        continue;
+      }
+      for (;;) {
+        const result = replaceOnceAcrossSpreadsheetTextNodes(xml, source, replacement);
+        xml = result.xml;
+        if (!result.changed) break;
+      }
+      xml = replaceSpreadsheetAttributeValues(xml, source, replacement);
+    }
+    return { ...entry, data: Buffer.from(xml, "utf8") };
+  });
+  return writeZip(entries);
+}
+
+function replaceOnceAcrossSpreadsheetTextNodes(xml: string, source: string, replacement: string) {
+  const pattern = /<((?:(?:[a-z][\w.-]*):)?t)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  const nodes: { start: number; end: number; text: string }[] = [];
+  for (let match = pattern.exec(xml); match; match = pattern.exec(xml)) {
+    const relative = match[0].indexOf(">") + 1;
+    nodes.push({ start: match.index + relative, end: match.index + relative + match[2].length, text: decodeXml(match[2]) });
+  }
+  const joined = nodes.map((node) => node.text).join("");
+  const sourceStart = joined.indexOf(source);
+  if (sourceStart < 0) return { xml, changed: false };
+  const sourceEnd = sourceStart + source.length;
+  let running = 0;
+  let startIndex = -1;
+  let endIndex = -1;
+  let startOffset = 0;
+  let endOffset = 0;
+  nodes.forEach((node, index) => {
+    const next = running + node.text.length;
+    if (startIndex < 0 && sourceStart >= running && sourceStart < next) { startIndex = index; startOffset = sourceStart - running; }
+    if (endIndex < 0 && sourceEnd > running && sourceEnd <= next) { endIndex = index; endOffset = sourceEnd - running; }
+    running = next;
+  });
+  if (startIndex < 0 || endIndex < 0) return { xml, changed: false };
+  const contents = nodes.map((node) => node.text);
+  if (startIndex === endIndex) contents[startIndex] = contents[startIndex].slice(0, startOffset) + replacement + contents[startIndex].slice(endOffset);
+  else {
+    contents[startIndex] = contents[startIndex].slice(0, startOffset) + replacement;
+    for (let index = startIndex + 1; index < endIndex; index += 1) contents[index] = "";
+    contents[endIndex] = contents[endIndex].slice(endOffset);
+  }
+  let cursor = 0;
+  let output = "";
+  nodes.forEach((node, index) => { output += xml.slice(cursor, node.start) + encodeXml(contents[index]); cursor = node.end; });
+  return { xml: output + xml.slice(cursor), changed: true };
+}
+
+function replaceSpreadsheetAttributeValues(xml: string, source: string, replacement: string) {
+  return xml.replace(/(\s[\w:.-]+=")([^"]*)(")/g, (match, prefix: string, value: string, suffix: string) => {
+    const decoded = decodeXml(value);
+    if (!decoded.includes(source)) return match;
+    return `${prefix}${encodeXml(decoded.replaceAll(source, replacement))}${suffix}`;
+  });
 }
 
 function replaceDocumentTitleProperty(xml: string, source: string, replacement: string) {

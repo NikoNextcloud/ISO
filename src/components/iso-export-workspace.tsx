@@ -6,6 +6,7 @@ import { Archive, Download, FileArchive, FolderTree, ImagePlus, Info, Loader2, S
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { storageErrorMessage } from "@/lib/storage-errors";
 import type { Organization, OrganizationHistoryEntry } from "@/lib/types";
+import { AiVisualStudio, type AiGeneratedVisual, type AiVisualTarget } from "@/components/ai-visual-studio";
 
 export type ExportFieldKey =
   | "companyName" | "uic" | "address" | "manager" | "representative"
@@ -42,6 +43,7 @@ export type IsoExportWorkspaceConfig = {
   logoAspect?: number;
   contents: string[];
   fields: ExportFieldSpec[];
+  visualTargets?: AiVisualTarget[];
 };
 
 type ExportForm = {
@@ -70,6 +72,7 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
   const [form, setForm] = useState<ExportForm>(emptyForm);
   const [logoPngDataUrl, setLogoPngDataUrl] = useState("");
   const [logoName, setLogoName] = useState("");
+  const [aiVisuals, setAiVisuals] = useState<AiGeneratedVisual[]>([]);
   const [loading, setLoading] = useState(Boolean(supabase));
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -141,7 +144,20 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
         if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
       }
       const payload = Object.fromEntries(config.fields.map((spec) => [spec.key, form[spec.key]]));
-      const response = await fetch(config.apiPath, { method: "POST", headers, body: JSON.stringify({ ...payload, logoPngDataUrl }) });
+      const response = await fetch(config.apiPath, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          ...payload,
+          logoPngDataUrl,
+          aiVisuals: aiVisuals.map((visual) => ({
+            title: visual.title,
+            type: visual.type,
+            pngDataUrl: visual.pngDataUrl,
+            targetHash: visual.targetHash
+          }))
+        })
+      });
       if (!response.ok) {
         const payload = await response.json().catch(() => null) as { error?: string } | null;
         throw new Error(payload?.error ?? "Генерирането не беше успешно.");
@@ -161,7 +177,7 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
 
   async function recordExportHistory(blob: Blob, filename: string) {
     const eventDate = new Date().toISOString();
-    const details = [form.version ? `версия ${form.version}` : "", form.effectiveDate ? `дата на влизане в сила ${formatDate(form.effectiveDate)}` : "", logoPngDataUrl ? "с фирмено лого" : ""].filter(Boolean);
+    const details = [form.version ? `версия ${form.version}` : "", form.effectiveDate ? `дата на влизане в сила ${formatDate(form.effectiveDate)}` : "", logoPngDataUrl ? "с фирмено лого" : "", aiVisuals.length ? `${aiVisuals.length} AI визуализации` : ""].filter(Boolean);
     const description = `Генерирана е пълна ${config.code} система${details.length ? `, ${details.join(", ")}` : ""}.`;
     const entry: OrganizationHistoryEntry = { id: makeId(), organizationId: selectedId, eventType: "system_exported", description, eventDate, fileName: filename, fileSize: blob.size };
     if (supabase && user) {
@@ -222,6 +238,7 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
           <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2">Фирма от регистъра<select className="focus-ring h-10 rounded border border-line bg-white px-3 text-sm font-normal outline-none" disabled={loading} onChange={(event) => selectOrganization(event.target.value)} value={selectedId}><option value="">Ръчно попълване</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name} · ЕИК {organization.uic}</option>)}</select></label>
           {config.fields.map((spec) => renderField(spec))}
           {config.logoAspect ? <div className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2"><span>Фирмено лого</span><div className="flex min-h-20 items-center gap-3 rounded border border-dashed border-slate-300 bg-slate-50 p-3">{logoPngDataUrl ? <img alt="Фирмено лого" className="h-14 w-24 object-contain" src={logoPngDataUrl} /> : <span className="grid h-14 w-24 place-items-center rounded bg-white text-slate-400"><ImagePlus className="h-5 w-5" /></span>}<div className="min-w-0 flex-1"><label className="focus-ring inline-flex cursor-pointer items-center gap-2 rounded border border-line bg-white px-3 py-2 text-sm font-medium text-ink hover:bg-slate-50"><ImagePlus className="h-4 w-4" />{logoName ? "Смени логото" : "Качи лого"}<input accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(event) => void chooseLogo(event.target.files?.[0])} type="file" /></label><p className="mt-1 truncate text-xs font-normal text-slate-500">{logoName || "PNG, JPG или WebP · до 8 MB"}</p></div>{logoPngDataUrl ? <button aria-label="Премахни логото" className="focus-ring grid h-8 w-8 place-items-center rounded text-slate-500 hover:bg-white hover:text-red-600" onClick={() => { setLogoPngDataUrl(""); setLogoName(""); }} title="Премахни логото" type="button"><X className="h-4 w-4" /></button> : null}</div></div> : null}
+          <AiVisualStudio companyName={form.companyName} onChange={setAiVisuals} standard={config.code} targets={config.visualTargets} value={aiVisuals} />
           {error ? <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p> : null}
         </div>
         <div className="flex justify-end border-t border-line px-5 py-4"><button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60" disabled={generating || loading} type="submit">{generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{generating ? `Генериране на ${config.templateCount} файла...` : "Генерирай ZIP система"}</button></div>

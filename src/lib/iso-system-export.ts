@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
-import { replaceWordText, writeZip, type WordLogoReplacement, type ZipEntry } from "@/lib/zip";
+import { replaceSpreadsheetText, replaceWordText, writeZip, type OfficeImageReplacement, type WordLogoReplacement, type ZipEntry } from "@/lib/zip";
 
 export type IsoExportRequest = {
   companyName: string;
@@ -19,6 +19,12 @@ export type IsoExportRequest = {
   effectiveDate?: string;
   version?: string;
   logoPngDataUrl?: string;
+  aiVisuals?: Array<{
+    title?: string;
+    type?: string;
+    pngDataUrl?: string;
+    targetHash?: string;
+  }>;
 };
 
 type NormalizedExportData = {
@@ -36,6 +42,12 @@ type NormalizedExportData = {
   effectiveDate: string;
   version: string;
   logoPngDataUrl: string;
+  aiVisuals: Array<{
+    title: string;
+    type: string;
+    data: Buffer;
+    targetHash: string;
+  }>;
 };
 
 export type IsoExportConfig = {
@@ -241,7 +253,16 @@ export const iso902027ExportConfig: IsoExportConfig = {
     "95a48d29c98862d39248d41e6d7293dcebdb56ad8f4cf054680f2552058fb05e",
     "b4286d493f38d5bd4fb50697b255246343344fbd5ae159b857fe4629c3bd5a68",
     "4c20acdfc6bc6cef282b146632036dc475b4f345990b9603772b96e6c3ea13d8",
-    "826dbf2a3330b726110fec7a46e7f7d7ca975b546d118e0552dbfb713492ac46"
+    "826dbf2a3330b726110fec7a46e7f7d7ca975b546d118e0552dbfb713492ac46",
+    "dd6fa2892851567356934c55245ec45dcd98facec950488b02a635396c020b15",
+    "63c9e8e8df36c4048da6b89e9d3eda9891edee45ab0db359c44b254931f3827d",
+    "f03b71eb770020c5e9a5ef48e4a7db79e87bc0d55af9f62d4198fcca79c73cd4",
+    "f2a035628910913686a3254fa4b039192914e9c0c6a491c2e590046c79336667",
+    "514a4921376c843f896b7046eb8525758723324df384e44b21907bddbf7604fe",
+    "d658105eb1c9bcb13738d432ba206e3d9ee3a3c0b2977f54ec60280ca97c45b6",
+    "f08b6e5ad452ec46a0c0b252bcc70c76c7570b51e37d8232835564736d8c1937",
+    "3811f4bfeda135cf340392bc4ccd321266d6e304a9b697d117dcb0470256a33f",
+    "9c76aabdeb4dd80225f9a44e8c48e45dd587c6eb5f783a79a9d3855262d17066"
   ],
   pathCompanyNames: [
     "ST Al. Atanassov", "Atanassov 24-08-2020", "Atanassov 21-08-2020",
@@ -279,7 +300,8 @@ export const iso902027ExportConfig: IsoExportConfig = {
     return [
       ...companyVariants.map((variant) => [variant, data.companyName] as [string, string]),
       ...replacementsWhen(data.manager, (manager) => [
-        ["Станимир Николов", manager], ["Злати Петров", manager]
+        ["Станимир Николов", manager], ["СТАНИМИР НИКОЛОВ", manager.toLocaleUpperCase("bg")],
+        ["Злати Петров", manager], ["ЗЛАТИ ПЕТРОВ", manager.toLocaleUpperCase("bg")]
       ]),
       ...replacementsWhen(data.representative, (representative) => [["Васил Минев", representative]]),
       ...replacementsWhen(data.uic, (uic) => [["831131023", uic], ["202755117", uic]]),
@@ -372,6 +394,9 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
 
   const logoData = decodeLogo(data.logoPngDataUrl);
   const logo = logoData ? { data: logoData, mode: config.logoMode, sourceHashes: config.logoSourceHashes } satisfies WordLogoReplacement : undefined;
+  const imageReplacements = data.aiVisuals
+    .filter((visual) => visual.targetHash)
+    .map((visual) => ({ data: visual.data, sourceHash: visual.targetHash })) satisfies OfficeImageReplacement[];
   const pathTitleReplacements = (config.pathCompanyNames ?? []).map((source) => [source, data.companyName] as [string, string]);
   const replacements = [...baseReplacements(data), ...pathTitleReplacements, ...config.replacements(data)];
   const folder = `${config.code} - ${safeName(data.companyName)}`;
@@ -379,10 +404,17 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
 
   for (const file of files) {
     let content = await fs.readFile(file.absolute);
-    if (file.relative.toLocaleLowerCase("bg").endsWith(".docx")) content = replaceWordText(content, replacements, logo);
+    const lowerName = file.relative.toLocaleLowerCase("bg");
+    if (lowerName.endsWith(".docx")) content = replaceWordText(content, replacements, logo, imageReplacements);
+    else if (lowerName.endsWith(".xlsx")) content = replaceSpreadsheetText(content, replacements, logo, imageReplacements);
     const outputPath = replaceCompanyInPath(file.relative, config.pathCompanyNames, data.companyName);
     entries.push({ name: path.posix.join(folder, outputPath), data: content });
   }
+
+  data.aiVisuals.forEach((visual, index) => {
+    const name = `${String(index + 1).padStart(2, "0")} - ${safeName(visual.title || visual.type || "AI визуализация")}.png`;
+    entries.push({ name: path.posix.join(folder, "AI визуализации", name), data: visual.data });
+  });
 
   const summary = [
     `${config.edition} - комплект документация`, `Организация: ${data.companyName}`,
@@ -391,7 +423,8 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
     ...summaryWhen(data.effectiveDate ? formatDate(data.effectiveDate) : "", "Дата на влизане в сила"),
     ...summaryWhen(data.version, "Версия"),
     `Дата на генериране: ${formatDate(new Date().toISOString().slice(0, 10))}`, `Документи: ${files.length}`,
-    `Фирмено лого: ${logoData ? "заменено в приложимите шаблони" : "оригиналните изображения са запазени"}`
+    `Фирмено лого: ${logoData ? "заменено в приложимите шаблони" : "оригиналните изображения са запазени"}`,
+    `AI визуализации: ${data.aiVisuals.length}`
   ].join("\r\n");
   entries.unshift({ name: path.posix.join(folder, "README - ДАННИ ЗА ЕКСПОРТА.txt"), data: Buffer.from(summary, "utf8") });
 
@@ -409,7 +442,8 @@ function normalizeRequest(body: IsoExportRequest): NormalizedExportData {
     contactName: optionalText(body.contactName), email: optionalText(body.email, 200), phone: optionalText(body.phone, 80),
     employees: optionalNumber(body.employees), activity: optionalText(body.activity, 1000), scope: optionalText(body.scope, 1500),
     effectiveDate: optionalText(body.effectiveDate, 20), version: optionalText(body.version, 20),
-    logoPngDataUrl: optionalText(body.logoPngDataUrl, 5_800_000)
+    logoPngDataUrl: optionalText(body.logoPngDataUrl, 5_800_000),
+    aiVisuals: normalizeAiVisuals(body.aiVisuals)
   };
 }
 
@@ -434,6 +468,31 @@ function decodeLogo(value: string) {
   const data = Buffer.from(match[1], "base64");
   if (data.length > 4_000_000) throw new Error("Логото е твърде голямо. Максималният размер е 4 MB.");
   if (data.length < 8 || data.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") throw new Error("Логото не е валиден PNG файл.");
+  return data;
+}
+
+function normalizeAiVisuals(value: IsoExportRequest["aiVisuals"]) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 4).map((item, index) => {
+    const pngDataUrl = optionalText(item?.pngDataUrl, 4_500_000);
+    if (!pngDataUrl) throw new Error(`Липсва изображение за AI визуализация ${index + 1}.`);
+    return {
+      title: optionalText(item?.title, 120) || `AI визуализация ${index + 1}`,
+      type: optionalText(item?.type, 80),
+      data: decodePngDataUrl(pngDataUrl, `AI визуализация ${index + 1}`),
+      targetHash: /^[a-f0-9]{64}$/i.test(item?.targetHash ?? "") ? item!.targetHash!.toLowerCase() : ""
+    };
+  });
+}
+
+function decodePngDataUrl(value: string, label: string) {
+  const match = /^data:image\/png;base64,([a-z0-9+/=]+)$/i.exec(value);
+  if (!match) throw new Error(`${label} трябва да бъде валидно PNG изображение.`);
+  const data = Buffer.from(match[1], "base64");
+  if (data.length > 3_000_000) throw new Error(`${label} е твърде голяма. Максималният размер е 3 MB.`);
+  if (data.length < 8 || data.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") {
+    throw new Error(`${label} не е валиден PNG файл.`);
+  }
   return data;
 }
 
