@@ -228,10 +228,10 @@ function convertToPng(source: string, labels: { title: string; description: stri
     const image = new window.Image();
     image.onload = () => {
       const dimensions = labels.layout === "portrait"
-        ? { width: 900, height: 1200 }
+        ? { width: 1200, height: 1600 }
         : labels.layout === "square"
-          ? { width: 1000, height: 1000 }
-          : { width: 1200, height: 800 };
+          ? { width: 1400, height: 1400 }
+          : { width: 1600, height: 1067 };
       const canvas = document.createElement("canvas");
       canvas.width = dimensions.width;
       canvas.height = dimensions.height;
@@ -241,19 +241,26 @@ function convertToPng(source: string, labels: { title: string; description: stri
       context.fillRect(0, 0, canvas.width, canvas.height);
 
       const padding = Math.round(canvas.width * 0.045);
-      const headerHeight = labels.layout === "portrait" ? 150 : 130;
-      const footerHeight = labels.layout === "portrait" ? 260 : 210;
+      const headerHeight = Math.round(canvas.height * 0.14);
+      const footerHeight = Math.round(canvas.height * (labels.layout === "portrait" ? 0.22 : 0.24));
       const imageBox = {
         x: padding,
         y: headerHeight,
         width: canvas.width - padding * 2,
         height: canvas.height - headerHeight - footerHeight
       };
-      const scale = Math.min(imageBox.width / image.naturalWidth, imageBox.height / image.naturalHeight);
-      const drawWidth = Math.round(image.naturalWidth * scale);
-      const drawHeight = Math.round(image.naturalHeight * scale);
+      const crop = findVisibleBounds(image);
+      const scale = Math.min(imageBox.width / crop.width, imageBox.height / crop.height);
+      const drawWidth = Math.round(crop.width * scale);
+      const drawHeight = Math.round(crop.height * scale);
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
       context.drawImage(
         image,
+        crop.x,
+        crop.y,
+        crop.width,
+        crop.height,
         imageBox.x + Math.round((imageBox.width - drawWidth) / 2),
         imageBox.y + Math.round((imageBox.height - drawHeight) / 2),
         drawWidth,
@@ -261,12 +268,12 @@ function convertToPng(source: string, labels: { title: string; description: stri
       );
 
       context.fillStyle = "#111827";
-      context.font = `700 ${fitFont(context, labels.title, canvas.width - padding * 2, labels.layout === "portrait" ? 34 : 38, 24)}px "Segoe UI", Arial, sans-serif`;
+      context.font = `700 ${fitFont(context, labels.title, canvas.width - padding * 2, Math.round(canvas.width * 0.036), 28)}px "Segoe UI", Arial, sans-serif`;
       context.textBaseline = "top";
-      context.fillText(labels.title, padding, 32);
+      context.fillText(labels.title, padding, Math.round(canvas.height * 0.035));
       context.fillStyle = "#475569";
-      context.font = `500 ${labels.layout === "portrait" ? 20 : 18}px "Segoe UI", Arial, sans-serif`;
-      context.fillText([labels.companyName, labels.standard].filter(Boolean).join(" · "), padding, 82);
+      context.font = `500 ${Math.round(canvas.width * 0.019)}px "Segoe UI", Arial, sans-serif`;
+      context.fillText([labels.companyName, labels.standard].filter(Boolean).join(" · "), padding, Math.round(canvas.height * 0.09));
 
       const footerY = canvas.height - footerHeight;
       context.strokeStyle = "#cbd5e1";
@@ -276,19 +283,63 @@ function convertToPng(source: string, labels: { title: string; description: stri
       context.lineTo(canvas.width - padding, footerY + 18);
       context.stroke();
       context.fillStyle = "#0f766e";
-      context.font = `700 ${labels.layout === "portrait" ? 22 : 20}px "Segoe UI", Arial, sans-serif`;
-      context.fillText("Описание", padding, footerY + 38);
+      context.font = `700 ${Math.round(canvas.width * 0.021)}px "Segoe UI", Arial, sans-serif`;
+      context.fillText("Описание", padding, footerY + Math.round(footerHeight * 0.18));
       context.fillStyle = "#334155";
-      context.font = `400 ${labels.layout === "portrait" ? 21 : 19}px "Segoe UI", Arial, sans-serif`;
-      drawWrappedText(context, labels.description, padding, footerY + 78, canvas.width - padding * 2, labels.layout === "portrait" ? 30 : 27, labels.layout === "portrait" ? 6 : 4);
+      const descriptionSize = Math.round(canvas.width * 0.018);
+      context.font = `400 ${descriptionSize}px "Segoe UI", Arial, sans-serif`;
+      drawWrappedText(context, labels.description, padding, footerY + Math.round(footerHeight * 0.37), canvas.width - padding * 2, Math.round(descriptionSize * 1.45), labels.layout === "portrait" ? 6 : 4);
 
       const result = canvas.toDataURL("image/png");
-      if (result.length > 4_500_000) { reject(new Error("AI изображението е твърде голямо за документа.")); return; }
+      if (result.length > 8_500_000) { reject(new Error("AI изображението е твърде голямо за документа.")); return; }
       resolve(result);
     };
     image.onerror = () => reject(new Error("Cloudflare AI върна невалидно изображение."));
     image.src = source;
   });
+}
+
+function findVisibleBounds(image: HTMLImageElement) {
+  const maxScanSize = 1200;
+  const scanScale = Math.min(1, maxScanSize / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scanScale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scanScale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return { x: 0, y: 0, width: image.naturalWidth, height: image.naturalHeight };
+  context.drawImage(image, 0, 0, width, height);
+
+  const pixels = context.getImageData(0, 0, width, height).data;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y += 2) {
+    for (let x = 0; x < width; x += 2) {
+      const index = (y * width + x) * 4;
+      const visible = pixels[index + 3] > 24 && (pixels[index] < 242 || pixels[index + 1] < 242 || pixels[index + 2] < 242);
+      if (!visible) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  if (maxX < minX || maxY < minY) return { x: 0, y: 0, width: image.naturalWidth, height: image.naturalHeight };
+
+  const margin = Math.max(12, Math.round(Math.max(maxX - minX, maxY - minY) * 0.06));
+  minX = Math.max(0, minX - margin);
+  minY = Math.max(0, minY - margin);
+  maxX = Math.min(width - 1, maxX + margin);
+  maxY = Math.min(height - 1, maxY + margin);
+  return {
+    x: Math.round(minX / scanScale),
+    y: Math.round(minY / scanScale),
+    width: Math.max(1, Math.round((maxX - minX + 1) / scanScale)),
+    height: Math.max(1, Math.round((maxY - minY + 1) / scanScale))
+  };
 }
 
 function fitFont(context: CanvasRenderingContext2D, text: string, maxWidth: number, start: number, minimum: number) {

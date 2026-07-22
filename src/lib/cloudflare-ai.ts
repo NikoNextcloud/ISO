@@ -94,7 +94,9 @@ export async function generateCloudflareVisual(input: AiVisualRequest) {
     `Content: ${prompt}`,
     `Color palette: white background with ${input.accent || "blue and teal"} accents.`,
     `Layout: ${input.layout || "landscape"}.`,
-    "Use crisp lines, strong visual hierarchy, generous white space and a restrained corporate style.",
+    "Use crisp thick lines, large high-contrast shapes, strong visual hierarchy and a restrained corporate style.",
+    "The visual must fill at least 85 percent of the canvas with narrow outer margins and no large empty areas.",
+    "Keep the composition simple and legible: use only a few large elements and avoid tiny boxes, thin connectors or miniature details.",
     "Do not add a logo, watermark, certification seal or invented numerical results.",
     "Do not render any text, words, letters or captions inside the image. Use shapes, icons, connectors and neutral numbered markers only.",
     "The application will add verified Bulgarian Cyrillic titles and descriptions after generation."
