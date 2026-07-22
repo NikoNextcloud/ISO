@@ -118,7 +118,9 @@ export function AiVisualStudio({
         description: prompt.trim(),
         companyName: companyName.trim(),
         standard,
-        layout
+        layout,
+        type,
+        accent
       });
       const targetLabel = targets.find((item) => item.sourceHash === targetHash)?.label ?? "Нов PNG файл в ZIP";
       const visual: AiGeneratedVisual = {
@@ -223,10 +225,9 @@ export function AiVisualStudio({
   </section>;
 }
 
-function convertToPng(source: string, labels: { title: string; description: string; companyName: string; standard: string; layout: string }) {
+function convertToPng(_source: string, labels: { title: string; description: string; companyName: string; standard: string; layout: string; type: string; accent: string }) {
   return new Promise<string>((resolve, reject) => {
-    const image = new window.Image();
-    image.onload = () => {
+    try {
       const dimensions = labels.layout === "portrait"
         ? { width: 1200, height: 1600 }
         : labels.layout === "square"
@@ -249,23 +250,7 @@ function convertToPng(source: string, labels: { title: string; description: stri
         width: canvas.width - padding * 2,
         height: canvas.height - headerHeight - footerHeight
       };
-      const crop = findVisibleBounds(image);
-      const scale = Math.min(imageBox.width / crop.width, imageBox.height / crop.height);
-      const drawWidth = Math.round(crop.width * scale);
-      const drawHeight = Math.round(crop.height * scale);
-      context.imageSmoothingEnabled = true;
-      context.imageSmoothingQuality = "high";
-      context.drawImage(
-        image,
-        crop.x,
-        crop.y,
-        crop.width,
-        crop.height,
-        imageBox.x + Math.round((imageBox.width - drawWidth) / 2),
-        imageBox.y + Math.round((imageBox.height - drawHeight) / 2),
-        drawWidth,
-        drawHeight
-      );
+      drawBulgarianDiagram(context, imageBox, labels.type, labels.accent);
 
       context.fillStyle = "#111827";
       context.font = `700 ${fitFont(context, labels.title, canvas.width - padding * 2, Math.round(canvas.width * 0.036), 28)}px "Segoe UI", Arial, sans-serif`;
@@ -293,53 +278,254 @@ function convertToPng(source: string, labels: { title: string; description: stri
       const result = canvas.toDataURL("image/png");
       if (result.length > 8_500_000) { reject(new Error("AI изображението е твърде голямо за документа.")); return; }
       resolve(result);
-    };
-    image.onerror = () => reject(new Error("Cloudflare AI върна невалидно изображение."));
-    image.src = source;
+    } catch (error) {
+      reject(error instanceof Error ? error : new Error("Изображението не можа да бъде изчертано."));
+    }
   });
 }
 
-function findVisibleBounds(image: HTMLImageElement) {
-  const maxScanSize = 1200;
-  const scanScale = Math.min(1, maxScanSize / Math.max(image.naturalWidth, image.naturalHeight));
-  const width = Math.max(1, Math.round(image.naturalWidth * scanScale));
-  const height = Math.max(1, Math.round(image.naturalHeight * scanScale));
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) return { x: 0, y: 0, width: image.naturalWidth, height: image.naturalHeight };
-  context.drawImage(image, 0, 0, width, height);
+type DiagramRect = { x: number; y: number; width: number; height: number };
 
-  const pixels = context.getImageData(0, 0, width, height).data;
-  let minX = width;
-  let minY = height;
-  let maxX = -1;
-  let maxY = -1;
-  for (let y = 0; y < height; y += 2) {
-    for (let x = 0; x < width; x += 2) {
-      const index = (y * width + x) * 4;
-      const visible = pixels[index + 3] > 24 && (pixels[index] < 242 || pixels[index + 1] < 242 || pixels[index + 2] < 242);
-      if (!visible) continue;
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
+const DIAGRAM_PALETTES: Record<string, { primary: string; secondary: string; light: string; dark: string }> = {
+  "blue and teal": { primary: "#2563eb", secondary: "#0d9488", light: "#e0f2fe", dark: "#0f172a" },
+  "green and charcoal": { primary: "#15803d", secondary: "#334155", light: "#dcfce7", dark: "#14532d" },
+  "orange and navy": { primary: "#ea580c", secondary: "#1e3a8a", light: "#ffedd5", dark: "#172554" },
+  "red and gray": { primary: "#dc2626", secondary: "#475569", light: "#fee2e2", dark: "#7f1d1d" }
+};
+
+function drawBulgarianDiagram(context: CanvasRenderingContext2D, box: DiagramRect, type: string, accent: string) {
+  const palette = DIAGRAM_PALETTES[accent] ?? DIAGRAM_PALETTES["blue and teal"];
+  context.fillStyle = "#f8fafc";
+  roundedRect(context, box.x, box.y, box.width, box.height, 20);
+  context.fill();
+  context.strokeStyle = "#e2e8f0";
+  context.lineWidth = 2;
+  context.stroke();
+  const inner = { x: box.x + box.width * 0.045, y: box.y + box.height * 0.07, width: box.width * 0.91, height: box.height * 0.86 };
+
+  if (type === "organization-chart") drawOrganizationChart(context, inner, palette);
+  else if (type === "risk-matrix") drawRiskMatrix(context, inner, palette);
+  else if (type === "environment-energy") drawEnvironmentDiagram(context, inner, palette);
+  else if (type === "data-chart") drawDataChart(context, inner, palette);
+  else drawFlowDiagram(context, inner, type, palette);
+}
+
+function drawFlowDiagram(context: CanvasRenderingContext2D, box: DiagramRect, type: string, palette: { primary: string; secondary: string; light: string; dark: string }) {
+  const labels = type === "incident-flow"
+    ? ["Сигнал", "Регистриране", "Оценка", "Действие", "Проверка", "Приключване"]
+    : type === "work-instruction"
+      ? ["Подготовка", "Безопасност", "Изпълнение", "Контрол", "Запис"]
+      : ["Вход", "Планиране", "Изпълнение", "Контрол", "Подобрение", "Резултат"];
+  const vertical = box.height > box.width * 0.9;
+  if (vertical) {
+    const nodeWidth = box.width * 0.58;
+    const nodeHeight = Math.min(112, box.height / (labels.length * 1.45));
+    const gap = (box.height - nodeHeight * labels.length) / (labels.length - 1);
+    labels.forEach((label, index) => {
+      const x = box.x + (box.width - nodeWidth) / 2;
+      const y = box.y + index * (nodeHeight + gap);
+      drawNode(context, { x, y, width: nodeWidth, height: nodeHeight }, label, index === 0 || index === labels.length - 1 ? palette.primary : palette.secondary, "#ffffff");
+      if (index < labels.length - 1) drawArrow(context, x + nodeWidth / 2, y + nodeHeight + 8, x + nodeWidth / 2, y + nodeHeight + gap - 8, palette.dark);
+    });
+    return;
+  }
+  const gap = box.width * 0.022;
+  const nodeWidth = (box.width - gap * (labels.length - 1)) / labels.length;
+  const nodeHeight = Math.min(150, box.height * 0.36);
+  const y = box.y + (box.height - nodeHeight) / 2;
+  labels.forEach((label, index) => {
+    const x = box.x + index * (nodeWidth + gap);
+    drawNode(context, { x, y, width: nodeWidth, height: nodeHeight }, label, index === 0 || index === labels.length - 1 ? palette.primary : palette.secondary, "#ffffff");
+    if (index < labels.length - 1) drawArrow(context, x + nodeWidth + 5, y + nodeHeight / 2, x + nodeWidth + gap - 5, y + nodeHeight / 2, palette.dark);
+  });
+}
+
+function drawOrganizationChart(context: CanvasRenderingContext2D, box: DiagramRect, palette: { primary: string; secondary: string; light: string; dark: string }) {
+  const top = { x: box.x + box.width * 0.33, y: box.y, width: box.width * 0.34, height: box.height * 0.18 };
+  drawNode(context, top, "Ръководство", palette.primary, "#ffffff");
+  const departments = ["Качество", "Операции", "Администрация", "Поддръжка"];
+  const roles = ["Отговорник по качеството", "Процесни отговорници", "Финанси и персонал", "Технически екип"];
+  const gap = box.width * 0.025;
+  const nodeWidth = (box.width - gap * 3) / 4;
+  const rowHeight = box.height * 0.19;
+  const rowOneY = box.y + box.height * 0.39;
+  const rowTwoY = box.y + box.height * 0.76;
+  const busY = box.y + box.height * 0.29;
+  context.strokeStyle = palette.dark;
+  context.lineWidth = Math.max(4, box.width * 0.004);
+  context.beginPath();
+  context.moveTo(top.x + top.width / 2, top.y + top.height);
+  context.lineTo(top.x + top.width / 2, busY);
+  context.lineTo(box.x + nodeWidth / 2, busY);
+  context.moveTo(top.x + top.width / 2, busY);
+  context.lineTo(box.x + box.width - nodeWidth / 2, busY);
+  context.stroke();
+  departments.forEach((label, index) => {
+    const x = box.x + index * (nodeWidth + gap);
+    context.beginPath();
+    context.moveTo(x + nodeWidth / 2, busY);
+    context.lineTo(x + nodeWidth / 2, rowOneY);
+    context.stroke();
+    drawNode(context, { x, y: rowOneY, width: nodeWidth, height: rowHeight }, label, palette.secondary, "#ffffff");
+    drawArrow(context, x + nodeWidth / 2, rowOneY + rowHeight + 8, x + nodeWidth / 2, rowTwoY - 8, palette.dark);
+    drawNode(context, { x, y: rowTwoY, width: nodeWidth, height: rowHeight }, roles[index], palette.light, palette.dark);
+  });
+}
+
+function drawRiskMatrix(context: CanvasRenderingContext2D, box: DiagramRect, palette: { primary: string; secondary: string; light: string; dark: string }) {
+  const labelSpace = Math.min(150, box.width * 0.13);
+  const gridSize = Math.min(box.width - labelSpace * 1.3, box.height - labelSpace * 0.65);
+  const cell = gridSize / 5;
+  const x0 = box.x + (box.width - gridSize) / 2 + labelSpace * 0.2;
+  const y0 = box.y + (box.height - gridSize) / 2;
+  const colors = ["#dcfce7", "#bbf7d0", "#fef3c7", "#fed7aa", "#fecaca"];
+  for (let row = 0; row < 5; row++) {
+    for (let column = 0; column < 5; column++) {
+      const level = Math.min(4, Math.floor((row + column) / 2));
+      context.fillStyle = colors[level];
+      context.fillRect(x0 + column * cell, y0 + (4 - row) * cell, cell, cell);
+      context.strokeStyle = "#ffffff";
+      context.lineWidth = 4;
+      context.strokeRect(x0 + column * cell, y0 + (4 - row) * cell, cell, cell);
+      drawCenteredText(context, String((row + 1) * (column + 1)), x0 + column * cell, y0 + (4 - row) * cell, cell, cell, Math.round(cell * 0.28), palette.dark, 700);
     }
   }
-  if (maxX < minX || maxY < minY) return { x: 0, y: 0, width: image.naturalWidth, height: image.naturalHeight };
+  drawCenteredText(context, "Въздействие", x0, y0 + gridSize + 18, gridSize, 50, 30, palette.dark, 700);
+  context.save();
+  context.translate(x0 - 55, y0 + gridSize / 2);
+  context.rotate(-Math.PI / 2);
+  drawCenteredText(context, "Вероятност", -gridSize / 2, -25, gridSize, 50, 30, palette.dark, 700);
+  context.restore();
+  const legend = [["Нисък", colors[0]], ["Среден", colors[2]], ["Висок", colors[3]], ["Критичен", colors[4]]] as const;
+  legend.forEach(([label, color], index) => {
+    const x = box.x + index * (box.width / legend.length);
+    context.fillStyle = color;
+    roundedRect(context, x + 8, box.y, box.width / legend.length - 16, 52, 10);
+    context.fill();
+    drawCenteredText(context, label, x + 8, box.y, box.width / legend.length - 16, 52, 24, palette.dark, 700);
+  });
+}
 
-  const margin = Math.max(12, Math.round(Math.max(maxX - minX, maxY - minY) * 0.06));
-  minX = Math.max(0, minX - margin);
-  minY = Math.max(0, minY - margin);
-  maxX = Math.min(width - 1, maxX + margin);
-  maxY = Math.min(height - 1, maxY + margin);
-  return {
-    x: Math.round(minX / scanScale),
-    y: Math.round(minY / scanScale),
-    width: Math.max(1, Math.round((maxX - minX + 1) / scanScale)),
-    height: Math.max(1, Math.round((maxY - minY + 1) / scanScale))
-  };
+function drawEnvironmentDiagram(context: CanvasRenderingContext2D, box: DiagramRect, palette: { primary: string; secondary: string; light: string; dark: string }) {
+  const topLabels = ["Ресурси", "Енергия", "Контрол"];
+  const bottomLabels = ["Емисии", "Отпадъци", "Подобрение"];
+  const nodeWidth = box.width * 0.23;
+  const nodeHeight = box.height * 0.18;
+  const center = { x: box.x + box.width * 0.34, y: box.y + box.height * 0.38, width: box.width * 0.32, height: box.height * 0.24 };
+  const positions = [box.x + box.width * 0.04, box.x + box.width * 0.385, box.x + box.width * 0.73];
+  topLabels.forEach((label, index) => {
+    const node = { x: positions[index], y: box.y, width: nodeWidth, height: nodeHeight };
+    drawNode(context, node, label, palette.primary, "#ffffff");
+    drawArrow(context, node.x + node.width / 2, node.y + node.height + 8, center.x + center.width / 2, center.y - 8, palette.dark);
+  });
+  drawNode(context, center, "Организация", palette.secondary, "#ffffff");
+  bottomLabels.forEach((label, index) => {
+    const node = { x: positions[index], y: box.y + box.height - nodeHeight, width: nodeWidth, height: nodeHeight };
+    drawArrow(context, center.x + center.width / 2, center.y + center.height + 8, node.x + node.width / 2, node.y - 8, palette.dark);
+    drawNode(context, node, label, index === 2 ? palette.primary : palette.light, index === 2 ? "#ffffff" : palette.dark);
+  });
+}
+
+function drawDataChart(context: CanvasRenderingContext2D, box: DiagramRect, palette: { primary: string; secondary: string; light: string; dark: string }) {
+  const chart = { x: box.x + box.width * 0.09, y: box.y + box.height * 0.08, width: box.width * 0.84, height: box.height * 0.75 };
+  context.strokeStyle = palette.dark;
+  context.lineWidth = 5;
+  context.beginPath();
+  context.moveTo(chart.x, chart.y);
+  context.lineTo(chart.x, chart.y + chart.height);
+  context.lineTo(chart.x + chart.width, chart.y + chart.height);
+  context.stroke();
+  const values = [0.48, 0.72, 0.58, 0.84, 0.66, 0.91];
+  const slot = chart.width / values.length;
+  values.forEach((value, index) => {
+    const barWidth = slot * 0.55;
+    const height = chart.height * value;
+    const x = chart.x + index * slot + (slot - barWidth) / 2;
+    const y = chart.y + chart.height - height;
+    const gradient = context.createLinearGradient(0, y, 0, y + height);
+    gradient.addColorStop(0, palette.primary);
+    gradient.addColorStop(1, palette.secondary);
+    context.fillStyle = gradient;
+    roundedRect(context, x, y, barWidth, height, 10);
+    context.fill();
+    drawCenteredText(context, `Данни ${index + 1}`, chart.x + index * slot, chart.y + chart.height + 15, slot, 55, 22, palette.dark, 600);
+  });
+}
+
+function drawNode(context: CanvasRenderingContext2D, rect: DiagramRect, label: string, fill: string, textColor: string) {
+  context.shadowColor = "rgba(15, 23, 42, 0.16)";
+  context.shadowBlur = 12;
+  context.shadowOffsetY = 5;
+  context.fillStyle = fill;
+  roundedRect(context, rect.x, rect.y, rect.width, rect.height, Math.min(18, rect.height * 0.16));
+  context.fill();
+  context.shadowColor = "transparent";
+  drawCenteredText(context, label, rect.x + 8, rect.y + 6, rect.width - 16, rect.height - 12, Math.min(32, rect.height * 0.3), textColor, 700);
+}
+
+function drawArrow(context: CanvasRenderingContext2D, fromX: number, fromY: number, toX: number, toY: number, color: string) {
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+  const head = 13;
+  context.strokeStyle = color;
+  context.fillStyle = color;
+  context.lineWidth = 5;
+  context.beginPath();
+  context.moveTo(fromX, fromY);
+  context.lineTo(toX, toY);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(toX, toY);
+  context.lineTo(toX - head * Math.cos(angle - Math.PI / 6), toY - head * Math.sin(angle - Math.PI / 6));
+  context.lineTo(toX - head * Math.cos(angle + Math.PI / 6), toY - head * Math.sin(angle + Math.PI / 6));
+  context.closePath();
+  context.fill();
+}
+
+function drawCenteredText(context: CanvasRenderingContext2D, text: string, x: number, y: number, width: number, height: number, maxSize: number, color: string, weight: number) {
+  let size = Math.max(14, Math.round(maxSize));
+  let lines = wrapText(context, text, width, size, weight);
+  while (size > 14 && (lines.length > 3 || lines.length * size * 1.22 > height)) {
+    size -= 1;
+    lines = wrapText(context, text, width, size, weight);
+  }
+  context.fillStyle = color;
+  context.font = `${weight} ${size}px "Segoe UI", Arial, sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  const lineHeight = size * 1.18;
+  const startY = y + height / 2 - ((lines.length - 1) * lineHeight) / 2;
+  lines.slice(0, 3).forEach((line, index) => context.fillText(line, x + width / 2, startY + index * lineHeight));
+  context.textAlign = "start";
+  context.textBaseline = "top";
+}
+
+function wrapText(context: CanvasRenderingContext2D, text: string, width: number, size: number, weight: number) {
+  context.font = `${weight} ${size}px "Segoe UI", Arial, sans-serif`;
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (!line || context.measureText(next).width <= width) line = next;
+    else { lines.push(line); line = word; }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  const value = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + value, y);
+  context.lineTo(x + width - value, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + value);
+  context.lineTo(x + width, y + height - value);
+  context.quadraticCurveTo(x + width, y + height, x + width - value, y + height);
+  context.lineTo(x + value, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - value);
+  context.lineTo(x, y + value);
+  context.quadraticCurveTo(x, y, x + value, y);
+  context.closePath();
 }
 
 function fitFont(context: CanvasRenderingContext2D, text: string, maxWidth: number, start: number, minimum: number) {
