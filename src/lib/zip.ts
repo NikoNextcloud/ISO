@@ -1,6 +1,13 @@
+import { createHash } from "node:crypto";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 
 export type ZipEntry = { name: string; data: Buffer; directory?: boolean };
+
+export type WordLogoReplacement = {
+  data: Buffer;
+  mode: "header-images" | "matching-images";
+  sourceHashes?: string[];
+};
 
 const CRC_TABLE = Array.from({ length: 256 }, (_, value) => {
   let crc = value;
@@ -161,8 +168,28 @@ function replaceOnceAcrossTextNodes(xml: string, source: string, replacement: st
   return { xml: output + xml.slice(cursor), changed: true };
 }
 
-export function replaceWordText(docx: Buffer, replacements: Array<[string, string]>) {
-  const entries = readZip(docx).map((entry) => {
+function headerImageTargets(entries: ZipEntry[]) {
+  const targets = new Set<string>();
+  for (const entry of entries) {
+    if (!/^word\/_rels\/header\d+\.xml\.rels$/i.test(entry.name)) continue;
+    const xml = entry.data.toString("utf8");
+    const relationshipPattern = /<Relationship\b[^>]*\bType="[^"]*\/image"[^>]*\bTarget="([^"]+)"[^>]*>|<Relationship\b[^>]*\bTarget="([^"]+)"[^>]*\bType="[^"]*\/image"[^>]*>/gi;
+    for (let match = relationshipPattern.exec(xml); match; match = relationshipPattern.exec(xml)) {
+      const target = (match[1] || match[2]).replaceAll("\\", "/").replace(/^\.\.\//, "");
+      targets.add(target.startsWith("word/") ? target : `word/${target}`);
+    }
+  }
+  return targets;
+}
+
+export function replaceWordText(docx: Buffer, replacements: Array<[string, string]>, logo?: WordLogoReplacement) {
+  const sourceEntries = readZip(docx);
+  const logoTargets = logo?.mode === "header-images" ? headerImageTargets(sourceEntries) : new Set<string>();
+  const sourceHashes = new Set(logo?.sourceHashes ?? []);
+  const entries = sourceEntries.map((entry) => {
+    const isPng = entry.name.toLocaleLowerCase("en").endsWith(".png");
+    const hashMatches = logo?.mode === "matching-images" && isPng && sourceHashes.has(createHash("sha256").update(entry.data).digest("hex"));
+    if (logo && isPng && (logoTargets.has(entry.name) || hashMatches)) return { ...entry, data: logo.data };
     if (!entry.name.startsWith("word/") || !entry.name.endsWith(".xml")) return entry;
     let xml = entry.data.toString("utf8");
     for (const [source, replacement] of replacements.sort((a, b) => b[0].length - a[0].length)) {
