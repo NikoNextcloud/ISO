@@ -2,7 +2,7 @@
 
 import { cloneElement, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { Archive, Download, FileArchive, FolderTree, ImagePlus, Loader2, ShieldCheck, X } from "lucide-react";
+import { Archive, Download, FileArchive, FolderTree, ImagePlus, Info, Loader2, ShieldCheck, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { storageErrorMessage } from "@/lib/storage-errors";
 import type { Organization, OrganizationHistoryEntry } from "@/lib/types";
@@ -17,6 +17,8 @@ export type IsoExportWorkspaceConfig = {
   scopeLabel: string;
   scopePlaceholder: string;
   logoAspect?: number;
+  requiredFields: string[];
+  optionalFields: string[];
   contents: string[];
 };
 
@@ -158,6 +160,15 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
     {blocked ? <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Влезте в приложението, за да генерирате защитения комплект документи.</div> : <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
       <form className="rounded-lg border border-line bg-white shadow-soft" onSubmit={generate}>
         <div className="border-b border-line px-5 py-4"><h3 className="text-sm font-semibold text-ink">Данни за организацията</h3><p className="mt-1 text-xs text-slate-500">Изберете съществуваща фирма или попълнете данните ръчно.</p></div>
+        <div className="flex gap-3 border-b border-blue-100 bg-blue-50 px-5 py-4 text-sm">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
+          <div className="min-w-0 space-y-1 text-slate-700">
+            <p className="font-semibold text-ink">Какво да попълните за {config.code}</p>
+            <p><span className="font-semibold">Задължителни:</span> {config.requiredFields.join(", ")}</p>
+            <p><span className="font-semibold">По избор:</span> {config.optionalFields.length ? config.optionalFields.join(", ") : "няма"}</p>
+            <p className="text-xs text-slate-500">Непопълнените полета не променят оригиналното съдържание в документите.</p>
+          </div>
+        </div>
         <div className="grid gap-4 p-5 sm:grid-cols-2">
           <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2">Фирма от регистъра<select className="focus-ring h-10 rounded border border-line bg-white px-3 text-sm font-normal outline-none" disabled={loading} onChange={(event) => selectOrganization(event.target.value)} value={selectedId}><option value="">Ръчно попълване</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name} · ЕИК {organization.uic}</option>)}</select></label>
           <ExportField label="Име на фирмата *"><input required value={form.companyName} onChange={(event) => setForm({ ...form, companyName: event.target.value })} /></ExportField>
