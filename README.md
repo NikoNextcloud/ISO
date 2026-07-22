@@ -52,7 +52,7 @@ npm run dev
 
 ### 1. Създаване на таблиците
 
-За нов Supabase проект изпълнете последователно `supabase/migrations/001_initial_schema.sql`, `supabase/migrations/004_certificates_history_and_cleanup.sql`, `supabase/migrations/005_private_file_storage.sql` и `supabase/migrations/006_single_user_storage_access.sql` в Supabase Dashboard -> SQL Editor.
+За нов Supabase проект изпълнете последователно `supabase/migrations/001_initial_schema.sql`, `supabase/migrations/004_certificates_history_and_cleanup.sql`, `supabase/migrations/005_private_file_storage.sql`, `supabase/migrations/006_single_user_storage_access.sql` и `supabase/migrations/007_add_integrated_iso_systems.sql` в Supabase Dashboard -> SQL Editor.
 
 Ако първата миграция вече е изпълнена, изпълнете последователно:
 
@@ -61,6 +61,7 @@ npm run dev
 3. `supabase/migrations/004_certificates_history_and_cleanup.sql`
 4. `supabase/migrations/005_private_file_storage.sql`
 5. `supabase/migrations/006_single_user_storage_access.sql`
+6. `supabase/migrations/007_add_integrated_iso_systems.sql`
 
 ### 2. Единствен потребител
 

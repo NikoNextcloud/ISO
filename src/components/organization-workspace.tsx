@@ -14,7 +14,10 @@ const LEGACY_STORAGE_KEY = "ims-ai-organizations-v1";
 const CERTIFICATES_STORAGE_KEY = "iso-certification-certificates-v1";
 const HISTORY_STORAGE_KEY = "iso-certification-history-v1";
 const DOCUMENTS_STORAGE_KEY = "iso-certification-documents-v1";
-const standardOptions: IsoStandardCode[] = ["ISO 9001", "ISO 14001", "ISO 45001", "ISO 27001", "ISO 50001"];
+const standardOptions: IsoStandardCode[] = [
+  "ISO 9001", "ISO 14001", "ISO 45001", "ISO 27001", "ISO 50001",
+  "ISO 9-20-27", "ISO 9-14-45", "ISO 9-14"
+];
 const statusOptions: { value: OrganizationStatus; label: string }[] = [
   { value: "draft", label: "Чернова" },
   { value: "implementation", label: "Внедряване" },
@@ -323,7 +326,7 @@ export function OrganizationWorkspace({ view }: { view: "dashboard" | "organizat
       </div>
       <div className="rounded-lg border border-line bg-white p-5 shadow-soft">
         <h3 className="mb-5 flex items-center gap-2 text-base font-bold text-ink"><BarChart3 className="h-5 w-5 text-blue-600" />Покритие по ISO стандарти</h3>
-        <div className="space-y-4">{standardOptions.map((standard) => {
+        <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">{standardOptions.map((standard) => {
           const count = organizations.filter((organization) => organization.standards.includes(standard)).length;
           const percentage = organizations.length ? Math.round((count / organizations.length) * 100) : 0;
           return <div key={standard}><div className="mb-1.5 flex items-center justify-between text-sm"><span className="font-semibold text-ink">{standard}</span><span className="text-slate-500">{count} {count === 1 ? "фирма" : "фирми"}</span></div><div className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-teal-600" style={{ width: `${percentage}%` }} /></div></div>;
