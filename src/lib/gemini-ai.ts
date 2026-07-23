@@ -3,14 +3,18 @@ import {
   type AiReviewPromptItem
 } from "@/lib/ai-review-prompt";
 
-const DEFAULT_GEMINI_REVIEW_MODEL = "gemini-3.5-flash";
-const FALLBACK_GEMINI_REVIEW_MODEL = "gemini-3.1-flash-lite";
+const DEFAULT_GEMINI_REVIEW_MODEL = "gemini-3.1-flash-lite";
+const FALLBACK_GEMINI_REVIEW_MODELS = [
+  "gemini-2.5-flash-lite",
+  "gemini-3.5-flash"
+] as const;
 const RETIRED_GEMINI_MODELS = new Set([
   "gemini-2.0-flash",
   "gemini-2.0-flash-001",
   "gemini-2.0-flash-lite",
   "gemini-2.0-flash-lite-001"
 ]);
+const workingModelByConfiguredModel = new Map<string, string>();
 
 type GeminiResponse = {
   error?: {
@@ -43,36 +47,43 @@ export async function generateGeminiTextReview(context: string, items: AiReviewP
   if (!items.length) return { response: '{"suggestions":[]}', model: `Gemini · ${model}` };
 
   const prompts = buildIsoReviewPrompts(context, items);
-  let selectedModel = model;
-  let result = await requestGeminiReview(apiKey, selectedModel, prompts);
-  if (
-    selectedModel !== FALLBACK_GEMINI_REVIEW_MODEL
-    && shouldTryGeminiFallback(result.response.status, result.payload)
-  ) {
-    selectedModel = FALLBACK_GEMINI_REVIEW_MODEL;
-    result = await requestGeminiReview(apiKey, selectedModel, prompts);
+  const candidates = uniqueModels([
+    workingModelByConfiguredModel.get(model),
+    model,
+    DEFAULT_GEMINI_REVIEW_MODEL,
+    ...FALLBACK_GEMINI_REVIEW_MODELS
+  ]);
+  const failures: string[] = [];
+
+  for (const selectedModel of candidates) {
+    const { response, payload } = await requestGeminiReview(apiKey, selectedModel, prompts);
+    if (response.ok && !payload?.error) {
+      if (payload?.promptFeedback?.blockReason) {
+        throw new Error(
+          payload.promptFeedback.blockReasonMessage?.trim()
+            || `Gemini блокира заявката: ${payload.promptFeedback.blockReason}.`
+        );
+      }
+      const text = extractGeminiOutputText(payload);
+      if (!text) {
+        const finishReason = payload?.candidates?.[0]?.finishReason;
+        throw new Error(
+          finishReason
+            ? `Gemini не върна текстов преглед. Причина: ${finishReason}.`
+            : "Gemini върна празен текстов преглед."
+        );
+      }
+      workingModelByConfiguredModel.set(model, selectedModel);
+      return { response: text, model: `Gemini · ${selectedModel}` };
+    }
+
+    failures.push(geminiError(response.status, payload?.error, selectedModel));
+    if (!shouldTryGeminiFallback(response.status)) break;
   }
 
-  const { response, payload } = result;
-  if (!response.ok || payload?.error) {
-    throw new Error(geminiError(response.status, payload?.error, selectedModel));
-  }
-  if (payload?.promptFeedback?.blockReason) {
-    throw new Error(
-      payload.promptFeedback.blockReasonMessage?.trim()
-        || `Gemini блокира заявката: ${payload.promptFeedback.blockReason}.`
-    );
-  }
-  const text = extractGeminiOutputText(payload);
-  if (!text) {
-    const finishReason = payload?.candidates?.[0]?.finishReason;
-    throw new Error(
-      finishReason
-        ? `Gemini не върна текстов преглед. Причина: ${finishReason}.`
-        : "Gemini върна празен текстов преглед."
-    );
-  }
-  return { response: text, model: `Gemini · ${selectedModel}` };
+  throw new Error(
+    `Gemini не успя да използва наличните модели. ${failures.at(-1) ?? "Неизвестна грешка."}`
+  );
 }
 
 async function requestGeminiReview(
@@ -97,8 +108,7 @@ async function requestGeminiReview(
           parts: [{ text: prompts.input }]
         }],
         generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 6_000,
+          maxOutputTokens: 8_000,
           responseMimeType: "application/json",
           responseSchema: geminiReviewSchema()
         }
@@ -147,10 +157,12 @@ export function geminiReviewSchema() {
   };
 }
 
-function shouldTryGeminiFallback(status: number, payload: GeminiResponse | null) {
-  if (status === 404) return true;
-  const detail = payload?.error?.message ?? "";
-  return status === 429 && /\blimit:\s*0\b|quota[^.]*\b0\b/i.test(detail);
+function uniqueModels(models: Array<string | undefined>) {
+  return [...new Set(models.filter((model): model is string => Boolean(model)))];
+}
+
+function shouldTryGeminiFallback(status: number) {
+  return status === 404 || status === 429 || status >= 500;
 }
 
 function geminiError(status: number, error: GeminiResponse["error"] | undefined, model: string) {

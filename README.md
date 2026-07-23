@@ -101,7 +101,7 @@ CLOUDFLARE_ACCOUNT_ID=YOUR_ACCOUNT_ID
 CLOUDFLARE_API_TOKEN=YOUR_WORKERS_AI_TOKEN
 CLOUDFLARE_AI_IMAGE_MODEL=@cf/black-forest-labs/flux-1-schnell
 GEMINI_API_KEY=YOUR_GEMINI_API_KEY
-GEMINI_REVIEW_MODEL=gemini-3.5-flash
+GEMINI_REVIEW_MODEL=gemini-3.1-flash-lite
 ```
 
 Стойностите са в Supabase Dashboard -> Project Settings -> API. Не поставяйте `service_role` ключ във frontend настройките.
@@ -116,7 +116,7 @@ GEMINI_REVIEW_MODEL=gemini-3.5-flash
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_AI_IMAGE_MODEL` (по избор)
 - `GEMINI_API_KEY` (необходим за AI смисловия и езиков преглед)
-- `GEMINI_REVIEW_MODEL` (по избор; по подразбиране `gemini-3.5-flash`; спреният `gemini-2.0-flash` автоматично се заменя)
+- `GEMINI_REVIEW_MODEL` (по избор; по подразбиране `gemini-3.1-flash-lite`; спреният `gemini-2.0-flash` автоматично се заменя)
 
 Направете нов deployment. Шаблоните за ISO 9001, ISO 14001, ISO 27001, ISO 45001, ISO 50001, ISO 9-20-27, ISO 9001-14001-45001 и ISO 9-14 се включват автоматично във Vercel build-а.
 

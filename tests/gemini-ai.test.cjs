@@ -85,9 +85,9 @@ test("Gemini replaces retired 2.0 models with the active default", () => {
   const previousModel = process.env.GEMINI_REVIEW_MODEL;
   try {
     process.env.GEMINI_REVIEW_MODEL = "gemini-2.0-flash";
-    assert.equal(gemini.geminiReviewModel(), "gemini-3.5-flash");
+    assert.equal(gemini.geminiReviewModel(), "gemini-3.1-flash-lite");
     process.env.GEMINI_REVIEW_MODEL = "models/gemini-2.0-flash-lite";
-    assert.equal(gemini.geminiReviewModel(), "gemini-3.5-flash");
+    assert.equal(gemini.geminiReviewModel(), "gemini-3.1-flash-lite");
     process.env.GEMINI_REVIEW_MODEL = "gemini-3.1-flash-lite";
     assert.equal(gemini.geminiReviewModel(), "gemini-3.1-flash-lite");
   } finally {
@@ -102,12 +102,12 @@ test("Gemini falls back to Flash-Lite when the preferred model has zero quota", 
   const previousModel = process.env.GEMINI_REVIEW_MODEL;
   const urls = [];
   process.env.GEMINI_API_KEY = "test-key";
-  process.env.GEMINI_REVIEW_MODEL = "gemini-3.5-flash";
+  process.env.GEMINI_REVIEW_MODEL = "gemini-no-quota-test-model";
   global.fetch = async (url) => {
     urls.push(url);
     if (urls.length === 1) {
       return new Response(JSON.stringify({
-        error: { message: "Quota exceeded for metric, limit: 0, model: gemini-3.5-flash" }
+        error: { message: "Quota exceeded for metric, limit: 0, model: gemini-no-quota-test-model" }
       }), { status: 429, headers: { "Content-Type": "application/json" } });
     }
     return new Response(JSON.stringify({
@@ -119,7 +119,42 @@ test("Gemini falls back to Flash-Lite when the preferred model has zero quota", 
       id: "s1",
       text: "Текст за проверка."
     }]);
-    assert.match(urls[0], /gemini-3\.5-flash:generateContent$/);
+    assert.match(urls[0], /gemini-no-quota-test-model:generateContent$/);
+    assert.match(urls[1], /gemini-3\.1-flash-lite:generateContent$/);
+    assert.equal(result.model, "Gemini · gemini-3.1-flash-lite");
+  } finally {
+    global.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousKey;
+    if (previousModel === undefined) delete process.env.GEMINI_REVIEW_MODEL;
+    else process.env.GEMINI_REVIEW_MODEL = previousModel;
+  }
+});
+
+test("Gemini falls back when the configured model is temporarily unavailable", async () => {
+  const previousFetch = global.fetch;
+  const previousKey = process.env.GEMINI_API_KEY;
+  const previousModel = process.env.GEMINI_REVIEW_MODEL;
+  const urls = [];
+  process.env.GEMINI_API_KEY = "test-key";
+  process.env.GEMINI_REVIEW_MODEL = "gemini-unavailable-test-model";
+  global.fetch = async (url) => {
+    urls.push(url);
+    if (urls.length === 1) {
+      return new Response(JSON.stringify({
+        error: { message: "The model is temporarily unavailable." }
+      }), { status: 503, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: '{"suggestions":[]}' }] } }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  try {
+    const result = await gemini.generateGeminiTextReview("Контекст", [{
+      id: "s1",
+      text: "Текст за проверка."
+    }]);
+    assert.match(urls[0], /gemini-unavailable-test-model:generateContent$/);
     assert.match(urls[1], /gemini-3\.1-flash-lite:generateContent$/);
     assert.equal(result.model, "Gemini · gemini-3.1-flash-lite");
   } finally {

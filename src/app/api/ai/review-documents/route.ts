@@ -79,12 +79,12 @@ export async function POST(request: NextRequest) {
       return Response.json({ review: emptyReview, report: generated.report, cached: false });
     }
 
-    const batches = createReviewBatches(extracted.segments, 90_000, 150);
+    const batches = createReviewBatches(extracted.segments, 120_000, 200);
     const suggestions: AiReviewSuggestion[] = [];
     const warnings: string[] = [];
     let reviewedSegments = 0;
     let model = "";
-    await mapWithConcurrency(batches, 2, async (batch, index) => {
+    await mapWithConcurrency(batches, 1, async (batch, index) => {
       try {
         const result = await generateGeminiTextReview(
           organizationContext,
