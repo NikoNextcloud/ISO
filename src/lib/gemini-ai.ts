@@ -1,6 +1,5 @@
 import {
   buildIsoReviewPrompts,
-  ISO_REVIEW_JSON_SCHEMA,
   type AiReviewPromptItem
 } from "@/lib/ai-review-prompt";
 
@@ -93,20 +92,30 @@ export function extractGeminiOutputText(payload: GeminiResponse | null) {
 }
 
 export function geminiReviewSchema() {
-  const suggestionProperties = ISO_REVIEW_JSON_SCHEMA.properties.suggestions.items.properties;
   return {
-    ...ISO_REVIEW_JSON_SCHEMA,
+    type: "object",
     propertyOrdering: ["suggestions"],
     properties: {
       suggestions: {
-        ...ISO_REVIEW_JSON_SCHEMA.properties.suggestions,
+        type: "array",
         items: {
-          ...ISO_REVIEW_JSON_SCHEMA.properties.suggestions.items,
+          type: "object",
           propertyOrdering: ["id", "suggested", "reason", "category", "confidence"],
-          properties: suggestionProperties
+          properties: {
+            id: { type: "string" },
+            suggested: { type: "string" },
+            reason: { type: "string" },
+            category: {
+              type: "string",
+              enum: ["language", "context", "consistency", "risk"]
+            },
+            confidence: { type: "number" }
+          },
+          required: ["id", "suggested", "reason", "category", "confidence"]
         }
       }
-    }
+    },
+    required: ["suggestions"]
   };
 }
 

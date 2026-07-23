@@ -49,7 +49,13 @@ test("Gemini review uses generateContent with structured JSON output", async () 
     );
     assert.equal(captured.init.headers["x-goog-api-key"], "test-key");
     assert.equal(captured.body.generationConfig.responseMimeType, "application/json");
-    assert.deepEqual(captured.body.generationConfig.responseSchema.propertyOrdering, ["suggestions"]);
+    const responseSchema = captured.body.generationConfig.responseSchema;
+    assert.deepEqual(responseSchema.propertyOrdering, ["suggestions"]);
+    assert.equal(JSON.stringify(responseSchema).includes("additionalProperties"), false);
+    assert.deepEqual(
+      responseSchema.properties.suggestions.items.propertyOrdering,
+      ["id", "suggested", "reason", "category", "confidence"]
+    );
     assert.equal(captured.body.contents[0].role, "user");
     assert.equal(result.response, '{"suggestions":[]}');
     assert.equal(result.model, "Gemini · gemini-test-model");
