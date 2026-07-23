@@ -47,6 +47,11 @@ export type IsoExportRequest = {
     pngDataUrl?: string;
     targetHash?: string;
   }>;
+  aiTextEdits?: Array<{
+    file?: string;
+    source?: string;
+    replacement?: string;
+  }>;
 };
 
 type NormalizedExportData = {
@@ -92,6 +97,11 @@ type NormalizedExportData = {
     data: Buffer;
     targetHash: string;
   }>;
+  aiTextEdits: Array<{
+    file: string;
+    source: string;
+    replacement: string;
+  }>;
 };
 
 export type IsoExportConfig = {
@@ -119,6 +129,7 @@ export type IsoExportReport = {
   spreadsheetFiles: number;
   legacyFiles: number;
   textReplacements: number;
+  aiTextReplacements: number;
   logoReplacements: number;
   imageReplacements: number;
   renamedPaths: number;
@@ -133,6 +144,7 @@ export type IsoExportReport = {
     imageReplacements: number;
     pathRenamed: boolean;
     contentWarnings: string[];
+    aiTextReplacements: number;
   }>;
 };
 
@@ -868,6 +880,7 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
     let textReplacements = 0;
     let logoReplacements = 0;
     let replacedImages = 0;
+    let aiTextReplacements = 0;
     let contentWarnings: string[] = [];
     if (lowerName.endsWith(".docx")) {
       const result = replaceWordTextWithStats(content, replacements, logo, imageReplacements);
@@ -875,6 +888,15 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
       textReplacements = result.textReplacements;
       logoReplacements = result.logoReplacements;
       replacedImages = result.imageReplacements;
+      const aiReplacements = data.aiTextEdits
+        .filter((edit) => edit.file === outputPath)
+        .map((edit) => [edit.source, edit.replacement] as [string, string]);
+      if (aiReplacements.length) {
+        const aiResult = replaceWordTextWithStats(content, aiReplacements);
+        content = aiResult.buffer;
+        aiTextReplacements = aiResult.textReplacements;
+        textReplacements += aiTextReplacements;
+      }
       contentWarnings = scanOfficeContent(content, config.contentRisks);
     } else if (lowerName.endsWith(".xlsx")) {
       const result = replaceSpreadsheetTextWithStats(content, replacements, logo, imageReplacements);
@@ -882,6 +904,15 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
       textReplacements = result.textReplacements;
       logoReplacements = result.logoReplacements;
       replacedImages = result.imageReplacements;
+      const aiReplacements = data.aiTextEdits
+        .filter((edit) => edit.file === outputPath)
+        .map((edit) => [edit.source, edit.replacement] as [string, string]);
+      if (aiReplacements.length) {
+        const aiResult = replaceSpreadsheetTextWithStats(content, aiReplacements);
+        content = aiResult.buffer;
+        aiTextReplacements = aiResult.textReplacements;
+        textReplacements += aiTextReplacements;
+      }
       contentWarnings = scanOfficeContent(content, config.contentRisks);
     }
     const pathRenamed = outputPath !== file.relative;
@@ -893,7 +924,8 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
       logoReplacements,
       imageReplacements: replacedImages,
       pathRenamed,
-      contentWarnings
+      contentWarnings,
+      aiTextReplacements
     });
     entries.push({ name: path.posix.join(folder, outputPath), data: content });
   }
@@ -932,6 +964,7 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
     "РЕЗУЛТАТ ОТ ПРОВЕРКАТА",
     `Променени файлове: ${report.changedFiles} от ${report.totalFiles}`,
     `Текстови замени: ${report.textReplacements}`,
+    `Одобрени AI текстови корекции: ${report.aiTextReplacements}`,
     `Сменени фирмени лога: ${report.logoReplacements}`,
     `Сменени служебни изображения: ${report.imageReplacements}`,
     `Преименувани файлове/папки: ${report.renamedPaths}`,
@@ -968,6 +1001,7 @@ export function isoExportReportHeaders(report: IsoExportReport) {
     "X-Changed-Files": String(report.changedFiles),
     "X-Unchanged-Files": String(report.unchangedFiles),
     "X-Text-Replacements": String(report.textReplacements),
+    "X-AI-Text-Replacements": String(report.aiTextReplacements),
     "X-Logo-Replacements": String(report.logoReplacements),
     "X-Image-Replacements": String(report.imageReplacements),
     "X-Legacy-Files": String(report.legacyFiles),
@@ -1021,6 +1055,7 @@ function createExportReport(config: IsoExportConfig, data: NormalizedExportData,
     spreadsheetFiles: files.filter((file) => file.format === "XLSX").length,
     legacyFiles,
     textReplacements: files.reduce((sum, file) => sum + file.textReplacements, 0),
+    aiTextReplacements: files.reduce((sum, file) => sum + file.aiTextReplacements, 0),
     logoReplacements: files.reduce((sum, file) => sum + file.logoReplacements, 0),
     imageReplacements: files.reduce((sum, file) => sum + file.imageReplacements, 0),
     renamedPaths: files.filter((file) => file.pathRenamed).length,
@@ -1108,12 +1143,29 @@ function normalizeRequest(body: IsoExportRequest): NormalizedExportData {
     effectiveDate: optionalText(body.effectiveDate, 20) || systemDate, version: optionalText(body.version, 20),
     preparedBy: optionalText(body.preparedBy), teamMember1: optionalText(body.teamMember1), teamMember2: optionalText(body.teamMember2),
     logoPngDataUrl: optionalText(body.logoPngDataUrl, 5_800_000),
-    aiVisuals: normalizeAiVisuals(body.aiVisuals)
+    aiVisuals: normalizeAiVisuals(body.aiVisuals),
+    aiTextEdits: normalizeAiTextEdits(body.aiTextEdits)
   };
 }
 
 function normalizeDesignDevelopment(value: unknown): NormalizedExportData["designDevelopment"] {
   return value === "applicable" || value === "not_applicable" ? value : "";
+}
+
+function normalizeAiTextEdits(value: IsoExportRequest["aiTextEdits"]): NormalizedExportData["aiTextEdits"] {
+  if (!Array.isArray(value)) return [];
+  if (value.length > 300) throw new Error("AI корекциите са повече от разрешените 300.");
+  return value.flatMap((item) => {
+    const file = optionalText(item?.file, 500).replaceAll("\\", "/");
+    const source = typeof item?.source === "string" ? item.source.slice(0, 5_000) : "";
+    const replacement = typeof item?.replacement === "string" ? item.replacement.slice(0, 7_500) : "";
+    const validFile = file
+      && !file.startsWith("/")
+      && !file.includes("../")
+      && /\.(?:docx|xlsx)$/i.test(file);
+    if (!validFile || source.length < 2 || !replacement.trim() || source === replacement) return [];
+    return [{ file, source, replacement }];
+  });
 }
 
 function baseReplacements(data: NormalizedExportData): Array<[string, string]> {

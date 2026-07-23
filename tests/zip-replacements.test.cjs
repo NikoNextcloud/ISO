@@ -70,4 +70,29 @@ test("Office archive remains unchanged when no source value exists", () => {
   assert.equal(result.changed, false);
 });
 
+test("DOCX and XLSX allow a replacement that contains the original text", () => {
+  const source = "Old Company";
+  const replacement = "Old Company (AI edit)";
+  const wordArchive = zip.writeZip([
+    { name: "word/document.xml", data: Buffer.from(`<w:document xmlns:w="w"><w:t>${source}</w:t></w:document>`) },
+    { name: "docProps/core.xml", data: Buffer.from(`<cp:coreProperties xmlns:cp="cp" xmlns:dc="dc"><dc:title>${source}</dc:title></cp:coreProperties>`) }
+  ]);
+  const sheetArchive = zip.writeZip([
+    { name: "xl/sharedStrings.xml", data: Buffer.from(`<sst><si><t>${source}</t></si></sst>`) },
+    { name: "xl/workbook.xml", data: Buffer.from(`<workbook><sheets><sheet name="${source}" sheetId="1"/></sheets></workbook>`) }
+  ]);
+
+  const wordResult = zip.replaceWordTextWithStats(wordArchive, [[source, replacement]]);
+  const sheetResult = zip.replaceSpreadsheetTextWithStats(sheetArchive, [[source, replacement]]);
+  const wordEntries = new Map(zip.readZip(wordResult.buffer).map((entry) => [entry.name, entry.data.toString("utf8")]));
+  const sheetEntries = new Map(zip.readZip(sheetResult.buffer).map((entry) => [entry.name, entry.data.toString("utf8")]));
+
+  assert.match(wordEntries.get("word/document.xml"), /Old Company \(AI edit\)/);
+  assert.match(wordEntries.get("docProps/core.xml"), /Old Company \(AI edit\)/);
+  assert.match(sheetEntries.get("xl/sharedStrings.xml"), /Old Company \(AI edit\)/);
+  assert.match(sheetEntries.get("xl/workbook.xml"), /name="Old Company \(AI edit\)"/);
+  assert.equal(wordResult.textReplacements, 2);
+  assert.equal(sheetResult.textReplacements, 2);
+});
+
 function sha(value) { return createHash("sha256").update(value).digest("hex"); }

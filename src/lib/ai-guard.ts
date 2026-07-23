@@ -9,6 +9,7 @@ type AiContext = { client: SupabaseClient | null; userId: string };
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_GENERATIONS = 10;
 const memoryCache = new Map<string, { value: CachedVisual; expiresAt: number }>();
+const reviewMemoryCache = new Map<string, { value: unknown; expiresAt: number }>();
 const memoryEvents = new Map<string, number[]>();
 
 export function aiRequestHash(input: AiVisualRequest) {
@@ -21,6 +22,10 @@ export function aiRequestHash(input: AiVisualRequest) {
     layout: input.layout?.trim() ?? ""
   };
   return createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+}
+
+export function aiReviewRequestHash(input: unknown) {
+  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 
 export async function createAiContext(request: NextRequest): Promise<AiContext> {
@@ -58,6 +63,29 @@ export async function saveCachedVisual(context: AiContext, hash: string, value: 
   if (!context.client || context.userId === "unknown-user") return;
   const payload = new Blob([JSON.stringify(value)], { type: "application/json" });
   await context.client.storage.from("ai-visual-cache").upload(`${context.userId}/${hash}.json`, payload, { contentType: "application/json", upsert: true });
+}
+
+export async function readCachedReview<T>(context: AiContext, hash: string): Promise<T | null> {
+  const local = reviewMemoryCache.get(hash);
+  if (local && local.expiresAt > Date.now()) return local.value as T;
+  if (local) reviewMemoryCache.delete(hash);
+  if (!context.client || context.userId === "unknown-user") return null;
+  const result = await context.client.storage.from("ai-visual-cache").download(`${context.userId}/reviews/${hash}.json`);
+  if (result.error) return null;
+  try {
+    const value = JSON.parse(await result.data.text()) as T;
+    reviewMemoryCache.set(hash, { value, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveCachedReview<T>(context: AiContext, hash: string, value: T) {
+  reviewMemoryCache.set(hash, { value, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
+  if (!context.client || context.userId === "unknown-user") return;
+  const payload = new Blob([JSON.stringify(value)], { type: "application/json" });
+  await context.client.storage.from("ai-visual-cache").upload(`${context.userId}/reviews/${hash}.json`, payload, { contentType: "application/json", upsert: true });
 }
 
 export async function consumeAiGeneration(context: AiContext, hash: string) {
