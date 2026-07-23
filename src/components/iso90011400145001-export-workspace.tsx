@@ -21,14 +21,25 @@ export function Iso90011400145001ExportWorkspace() {
     fields: [
       { key: "companyName", required: true, hint: "заменя ЕКОБУЛ ПАРТНЕР и БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ" },
       { key: "uic", required: true, hint: "заменя ЕИК 206395182" },
+      { key: "legalForm", hint: "например ООД или ЕООД" },
       { key: "address", required: true, hint: "заменя адреса в гр. Пазарджик" },
+      { key: "city", hint: "използва се за общината и местата на одитите" },
       { key: "manager", required: true, hint: "заменя Иван Георгиев" },
+      { key: "foundedAt", hint: "изчиства противоречивите дати за създаване" },
       { key: "email", hint: "заменя office@ecobul.eu" },
       { key: "phone", hint: "заменя 0897550025" },
       { key: "effectiveDate", required: true },
+      { key: "internalAuditDate", hint: "дата за план, заповед и доклад от вътрешния одит" },
+      { key: "managementReviewDate", hint: "дата за прегледа от ръководството" },
+      { key: "previousYear", hint: "заменя старите позовавания на 2021 г." },
+      { key: "currentYear", hint: "заменя старите позовавания на 2022 г." },
       { key: "version", hint: "попълнете само когато искате обща нова версия" },
-      { key: "activity", hint: "основна дейност на организацията" },
-      { key: "scope", hint: "обхват на интегрираната система" }
+      { key: "activity", required: true, hint: "по нея се адаптира секторното съдържание" },
+      { key: "scope", hint: "обхват на интегрираната система" },
+      { key: "physicalScope", hint: "площадки, цехове, складове, транспорт и инфраструктура" },
+      { key: "organizationContext", hint: "заменя чуждия контекст; ако е празно, се съставя от дейността" },
+      { key: "processesDescription", hint: "реалните процеси; ако е празно, се съставят от дейността" },
+      { key: "trainingDetails", hint: "попълнете само ако обучителят и датата са известни" }
     ],
     visualTargets: [
       {
