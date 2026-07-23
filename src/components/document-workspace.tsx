@@ -14,7 +14,7 @@ const ORGANIZATIONS_KEY = "iso-certification-organizations-v2";
 const LEGACY_ORGANIZATIONS_KEY = "ims-ai-organizations-v1";
 const standardOptions: IsoStandardCode[] = [
   "ISO 9001", "ISO 14001", "ISO 45001", "ISO 27001", "ISO 50001",
-  "ISO 9-20-27", "ISO 9-14-45", "ISO 9001-14001-45001", "ISO 9-14"
+  "ISO 9-20-27", "ISO 9001-14001-45001", "ISO 9-14"
 ];
 const typeOptions: { value: ImsDocument["type"]; label: string }[] = [
   { value: "policy", label: "Политика" }, { value: "procedure", label: "Процедура" },

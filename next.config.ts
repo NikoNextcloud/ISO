@@ -9,7 +9,6 @@ const nextConfig: NextConfig = {
     "/api/iso45001/export": ["./templates/iso45001/**/*"],
     "/api/iso50001/export": ["./templates/iso50001/**/*"],
     "/api/iso902027/export": ["./templates/iso902027/**/*"],
-    "/api/iso91445/export": ["./templates/iso91445/**/*"],
     "/api/iso90011400145001/export": ["./templates/iso90011400145001/**/*"],
     "/api/iso914/export": ["./templates/iso914/**/*"]
   }

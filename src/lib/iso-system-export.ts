@@ -57,9 +57,9 @@ type NormalizedExportData = {
 };
 
 export type IsoExportConfig = {
-  code: "ISO 9001" | "ISO 14001" | "ISO 27001" | "ISO 45001" | "ISO 50001" | "ISO 9-20-27" | "ISO 9-14-45" | "ISO 9-14" | "ISO 9001-14001-45001";
+  code: "ISO 9001" | "ISO 14001" | "ISO 27001" | "ISO 45001" | "ISO 50001" | "ISO 9-20-27" | "ISO 9-14" | "ISO 9001-14001-45001";
   edition: string;
-  templateDirectory: "iso9001" | "iso14001" | "iso27001" | "iso45001" | "iso50001" | "iso902027" | "iso91445" | "iso914" | "iso90011400145001";
+  templateDirectory: "iso9001" | "iso14001" | "iso27001" | "iso45001" | "iso50001" | "iso902027" | "iso914" | "iso90011400145001";
   logoMode: WordLogoReplacement["mode"];
   logoSourceHashes?: string[];
   pathCompanyNames?: string[];
@@ -356,42 +356,6 @@ export const iso902027ExportConfig: IsoExportConfig = {
   }
 };
 
-export const iso91445ExportConfig: IsoExportConfig = {
-  code: "ISO 9-14-45",
-  edition: "ISO 9001:2015 + ISO 14001:2015 + ISO 45001:2018",
-  templateDirectory: "iso91445",
-  logoMode: "matching-images",
-  pathCompanyNames: [
-    "ВИТОША ГАЗ ЕООД", "Витоша газ ЕООД", "ВИТОША ГАЗ", "Витоша газ",
-    "Техно проект пласт ООД", "Техно проект пласт"
-  ],
-  replacements: (data) => {
-    const companyVariants = [
-      "„„Витоша газ“  ЕООД", "„Витоша газ “  ЕООД",
-      "„Витоша газ“  ЕООД", "„ВИТОША ГАЗ“  ЕООД",
-      "„Витоша газ“ ЕООД", '"Витоша газ" ЕООД',
-      "“Витоша газ” ЕООД", "Витоша газ ЕООД",
-      "Техно проект пласт ООД"
-    ];
-    return [
-      ...companyVariants.map((variant) => [variant, data.companyName] as [string, string]),
-      ...replacementsWhen(data.manager, (manager) => [["Иван Георгиев", manager]]),
-      ...replacementsWhen(data.address, (address) => [
-        ["гр. София-Банкя,  Адрес: ул. Слънчев бряг №42", address],
-        ["гр. София-Банкя, Адрес: ул. Слънчев бряг №42", address],
-        ["гр. София-Банкя", address],
-        ["Адрес:", ""],
-        ["ул. Слънчев бряг 42", ""],
-        ["1000 София, ул. „Любляна“ 4", ""]
-      ]),
-      ...replacementsWhen(data.uic, (uic) => [["204192799", uic]]),
-      ...replacementsWhen(data.email, (email) => [["e.vasileva@vitoshagas.com", email]]),
-      ...replacementsWhen(data.phone, (phone) => [["+359/895668474", phone]]),
-      ...replacementsWhen(data.effectiveDate, (date) => [["07.11.2019", formatDate(date)]])
-    ];
-  }
-};
-
 export const iso90011400145001ExportConfig: IsoExportConfig = {
   code: "ISO 9001-14001-45001",
   edition: "ISO 9001:2015 + ISO 14001:2015 + ISO 45001:2018",
@@ -498,7 +462,7 @@ export const iso914ExportConfig: IsoExportConfig = {
 export function getIsoExportConfig(code: string) {
   return [
     iso9001ExportConfig, iso14001ExportConfig, iso27001ExportConfig, iso45001ExportConfig,
-    iso50001ExportConfig, iso902027ExportConfig, iso91445ExportConfig,
+    iso50001ExportConfig, iso902027ExportConfig,
     iso90011400145001ExportConfig, iso914ExportConfig
   ].find((config) => config.code === code);
 }

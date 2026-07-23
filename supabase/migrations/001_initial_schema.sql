@@ -7,7 +7,6 @@ create type public.iso_standard_code as enum (
   'ISO 27001',
   'ISO 50001',
   'ISO 9-20-27',
-  'ISO 9-14-45',
   'ISO 9-14',
   'ISO 9001-14001-45001'
 );
@@ -225,7 +224,6 @@ insert into public.standards (code, title, description) values
   ('ISO 27001', 'Information security management system', 'Assets, risk treatment, Statement of Applicability and security controls.'),
   ('ISO 50001', 'Energy management system', 'Energy review, baselines, EnPI, objectives and monitoring.'),
   ('ISO 9-20-27', 'Integrated quality, service and information security system', 'ISO 9001, ISO/IEC 20000-1 and ISO/IEC 27001 in one integrated system.'),
-  ('ISO 9-14-45', 'Integrated quality, environmental and occupational safety system', 'ISO 9001, ISO 14001 and ISO 45001 in one integrated system.'),
   ('ISO 9-14', 'Integrated quality and environmental system', 'ISO 9001 and ISO 14001 in one integrated system.'),
   ('ISO 9001-14001-45001', 'Integrated quality, environmental and occupational safety system', 'Full template package for ISO 9001, ISO 14001 and ISO 45001.')
 on conflict (code) do nothing;
