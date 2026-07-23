@@ -105,7 +105,6 @@ type ExportReport = {
 };
 
 type GeneratedArchive = { url: string; filename: string; blob: Blob };
-type AiReviewProvider = "auto" | "openai" | "cloudflare";
 
 const emptyForm: ExportForm = {
   companyName: "", uic: "", legalForm: "", address: "", city: "", manager: "", foundedAt: "", representative: "",
@@ -138,7 +137,6 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
   const [aiReviewOpen, setAiReviewOpen] = useState(false);
   const [aiReviewCached, setAiReviewCached] = useState(false);
   const [aiReviewSource, setAiReviewSource] = useState("");
-  const [aiReviewProvider, setAiReviewProvider] = useState<AiReviewProvider>("auto");
   const [error, setError] = useState("");
 
   useEffect(() => () => { if (generatedArchive?.url) URL.revokeObjectURL(generatedArchive.url); }, [generatedArchive?.url]);
@@ -230,7 +228,7 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
   }
 
   function currentReviewSource() {
-    return JSON.stringify({ code: config.code, form, provider: aiReviewProvider });
+    return JSON.stringify({ code: config.code, form, provider: "gemini" });
   }
 
   function exportPayload(includeAiTextEdits = true) {
@@ -278,7 +276,7 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
       const response = await fetch("/api/ai/review-documents", {
         method: "POST",
         headers: await requestHeaders(),
-        body: JSON.stringify({ ...exportPayload(false), provider: aiReviewProvider })
+        body: JSON.stringify(exportPayload(false))
       });
       const payload = await response.json().catch(() => null) as { review?: AiDocumentReview; report?: ExportReport; cached?: boolean; error?: string } | null;
       if (!response.ok || !payload?.review) throw new Error(payload?.error ?? "AI прегледът не беше завършен.");
@@ -410,13 +408,10 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
           {error ? <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p> : null}
         </div>
         <div className="flex flex-wrap justify-end gap-3 border-t border-line px-5 py-4">
-          <label className="mr-auto flex items-center gap-2 text-xs font-semibold text-slate-600">AI доставчик
-            <select aria-label="AI доставчик за преглед" className="focus-ring h-10 rounded border border-line bg-white px-3 text-sm font-medium text-ink outline-none" disabled={aiReviewing || generating} onChange={(event) => setAiReviewProvider(event.target.value as AiReviewProvider)} value={aiReviewProvider}>
-              <option value="auto">Автоматично</option>
-              <option value="openai">ChatGPT (OpenAI)</option>
-              <option value="cloudflare">Cloudflare AI</option>
-            </select>
-          </label>
+          <div className="mr-auto flex h-10 items-center gap-2 text-xs font-semibold text-slate-600">
+            <span>AI доставчик</span>
+            <span className="rounded border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800">Gemini</span>
+          </div>
           <button className="focus-ring inline-flex items-center gap-2 rounded border border-teal-300 bg-white px-4 py-2.5 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:opacity-60" disabled={aiReviewing || previewing || generating || loading} onClick={() => void runAiReview()} type="button">{aiReviewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}{aiReviewing ? `AI преглежда ${config.templateCount} файла...` : "AI смислов и езиков преглед"}</button>
           <button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60" disabled={previewing || aiReviewing || generating || loading} type="submit">{previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}{previewing ? `Проверка на ${config.templateCount} файла...` : "Технически преглед"}</button>
         </div>

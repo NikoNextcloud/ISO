@@ -9,8 +9,7 @@ import {
   type AiReviewSuggestion
 } from "@/lib/ai-document-review";
 import { aiReviewRequestHash, consumeAiGeneration, createAiContext, readCachedReview, saveCachedReview } from "@/lib/ai-guard";
-import { generateCloudflareTextReview } from "@/lib/cloudflare-ai";
-import { generateOpenAiTextReview, hasOpenAiConfiguration } from "@/lib/openai-ai";
+import { generateGeminiTextReview } from "@/lib/gemini-ai";
 import {
   authorizeIsoExport,
   createIsoSystemArchive,
@@ -23,9 +22,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-type AiReviewProvider = "auto" | "openai" | "cloudflare";
-type ReviewRequest = IsoExportRequest & { code?: string; provider?: AiReviewProvider };
-type ProviderReviewResult = { response: string; model: string; warning?: string };
+type ReviewRequest = IsoExportRequest & { code?: string };
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,8 +32,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as ReviewRequest;
     const config = getIsoExportConfig(body.code ?? "");
     if (!config) return Response.json({ error: "Неподдържана ISO система." }, { status: 400 });
-    const provider = normalizeProvider(body.provider);
-
     const sourceBody: IsoExportRequest = {
       ...body,
       logoPngDataUrl: "",
@@ -51,7 +46,7 @@ export async function POST(request: NextRequest) {
     const extracted = extractReviewSegments(generated.archive);
     const organizationContext = buildReviewContext(body, config.code);
     const hash = aiReviewRequestHash({
-      provider,
+      provider: "gemini",
       standard: config.code,
       organizationContext,
       segments: extracted.segments
@@ -91,13 +86,11 @@ export async function POST(request: NextRequest) {
     let model = "";
     await mapWithConcurrency(batches, 3, async (batch, index) => {
       try {
-        const result = await generateProviderReview(
-          provider,
+        const result = await generateGeminiTextReview(
           organizationContext,
           batch.map((segment) => ({ id: segment.id, text: segment.text }))
         );
         model ||= result.model;
-        if (result.warning && !warnings.includes(result.warning)) warnings.push(result.warning);
         const parsed = parseAiReviewJson(result.response);
         suggestions.push(...normalizeReviewSuggestions(parsed, batch));
         reviewedSegments += batch.length;
@@ -105,7 +98,7 @@ export async function POST(request: NextRequest) {
         warnings.push(`AI пакет ${index + 1} от ${batches.length} не беше проверен: ${error instanceof Error ? error.message : "неизвестна грешка"}`);
       }
     });
-    if (!reviewedSegments) throw new Error(warnings[0] ?? "Избраният AI доставчик не успя да прегледа документите.");
+    if (!reviewedSegments) throw new Error(warnings[0] ?? "Gemini не успя да прегледа документите.");
 
     const unique = deduplicateSuggestions(suggestions);
     if (unique.length > 300) warnings.push(`Открити са ${unique.length} предложения. Показани са първите 300.`);
@@ -134,40 +127,6 @@ export async function POST(request: NextRequest) {
       { status: 500, headers: { "Cache-Control": "no-store" } }
     );
   }
-}
-
-function normalizeProvider(value: unknown): AiReviewProvider {
-  return value === "openai" || value === "cloudflare" ? value : "auto";
-}
-
-async function generateProviderReview(
-  provider: AiReviewProvider,
-  context: string,
-  items: Array<{ id: string; text: string }>
-): Promise<ProviderReviewResult> {
-  if (provider === "openai") return generateOpenAiTextReview(context, items);
-  if (provider === "cloudflare") return generateCloudflareTextReview(context, items);
-  if (!hasOpenAiConfiguration()) {
-    const result = await generateCloudflareTextReview(context, items);
-    return { ...result, warning: "OPENAI_API_KEY не е настроен. Прегледът е извършен с Cloudflare AI." };
-  }
-  try {
-    return await generateOpenAiTextReview(context, items);
-  } catch (openAiError) {
-    try {
-      const result = await generateCloudflareTextReview(context, items);
-      return {
-        ...result,
-        warning: `OpenAI не беше достъпен и прегледът премина автоматично към Cloudflare AI: ${errorMessage(openAiError)}`
-      };
-    } catch (cloudflareError) {
-      throw new Error(`OpenAI: ${errorMessage(openAiError)} Cloudflare AI: ${errorMessage(cloudflareError)}`);
-    }
-  }
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "неизвестна грешка";
 }
 
 async function mapWithConcurrency<T>(
