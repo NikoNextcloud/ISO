@@ -9,7 +9,7 @@ import {
   type AiReviewSuggestion
 } from "@/lib/ai-document-review";
 import { aiReviewRequestHash, consumeAiGeneration, createAiContext, readCachedReview, saveCachedReview } from "@/lib/ai-guard";
-import { generateGeminiTextReview } from "@/lib/gemini-ai";
+import { generateGeminiTextReview, geminiReviewModel } from "@/lib/gemini-ai";
 import {
   authorizeIsoExport,
   createIsoSystemArchive,
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     const extracted = extractReviewSegments(generated.archive);
     const organizationContext = buildReviewContext(body, config.code);
     const hash = aiReviewRequestHash({
-      provider: "gemini",
+      provider: `gemini:${geminiReviewModel()}`,
       standard: config.code,
       organizationContext,
       segments: extracted.segments
@@ -79,12 +79,12 @@ export async function POST(request: NextRequest) {
       return Response.json({ review: emptyReview, report: generated.report, cached: false });
     }
 
-    const batches = createReviewBatches(extracted.segments);
+    const batches = createReviewBatches(extracted.segments, 90_000, 150);
     const suggestions: AiReviewSuggestion[] = [];
     const warnings: string[] = [];
     let reviewedSegments = 0;
     let model = "";
-    await mapWithConcurrency(batches, 3, async (batch, index) => {
+    await mapWithConcurrency(batches, 2, async (batch, index) => {
       try {
         const result = await generateGeminiTextReview(
           organizationContext,
