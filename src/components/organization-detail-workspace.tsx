@@ -256,7 +256,10 @@ type OrganizationRow = {
   manager: string | null; founded_at: string | null; representative: string | null; contact_name: string | null;
   contact_phone: string | null; contact_email: string | null; employees_count: number; activity: string | null;
   physical_scope: string | null; system_date: string | null; organization_context: string | null;
-  processes_description: string | null; training_details: string | null; internal_audit_date: string | null;
+  processes_description: string | null; products_services: string | null; environmental_aspects: string | null;
+  occupational_risks: string | null; external_parties: string | null; waste_management: string | null;
+  design_development: Organization["designDevelopment"] | null; post_delivery_activities: string | null;
+  training_details: string | null; internal_audit_date: string | null;
   management_review_date: string | null; previous_year: number | null; current_year: number | null;
   sites_count: number; standards: IsoStandardCode[] | null; status: OrganizationStatus; readiness_percent: number;
   next_audit_date: string | null;
@@ -273,7 +276,11 @@ function organizationFromDatabase(value: OrganizationRow): Organization {
     contactPhone: value.contact_phone ?? "", contactEmail: value.contact_email ?? "",
     employees: value.employees_count ?? 0, activity: value.activity ?? "", physicalScope: value.physical_scope ?? "",
     systemDate: value.system_date ?? "", organizationContext: value.organization_context ?? "",
-    processesDescription: value.processes_description ?? "", trainingDetails: value.training_details ?? "",
+    processesDescription: value.processes_description ?? "", productsServices: value.products_services ?? "",
+    environmentalAspects: value.environmental_aspects ?? "", occupationalRisks: value.occupational_risks ?? "",
+    externalParties: value.external_parties ?? "", wasteManagement: value.waste_management ?? "",
+    designDevelopment: value.design_development ?? "", postDeliveryActivities: value.post_delivery_activities ?? "",
+    trainingDetails: value.training_details ?? "",
     internalAuditDate: value.internal_audit_date ?? "", managementReviewDate: value.management_review_date ?? "",
     previousYear: value.previous_year ?? undefined, currentYear: value.current_year ?? undefined,
     sites: value.sites_count ?? 1, standards: value.standards ?? [], status: value.status,

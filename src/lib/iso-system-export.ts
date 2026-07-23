@@ -23,6 +23,13 @@ export type IsoExportRequest = {
   systemDate?: string;
   organizationContext?: string;
   processesDescription?: string;
+  productsServices?: string;
+  environmentalAspects?: string;
+  occupationalRisks?: string;
+  externalParties?: string;
+  wasteManagement?: string;
+  designDevelopment?: string;
+  postDeliveryActivities?: string;
   trainingDetails?: string;
   internalAuditDate?: string;
   managementReviewDate?: string;
@@ -61,6 +68,13 @@ type NormalizedExportData = {
   systemDate: string;
   organizationContext: string;
   processesDescription: string;
+  productsServices: string;
+  environmentalAspects: string;
+  occupationalRisks: string;
+  externalParties: string;
+  wasteManagement: string;
+  designDevelopment: "" | "applicable" | "not_applicable";
+  postDeliveryActivities: string;
   trainingDetails: string;
   internalAuditDate: string;
   managementReviewDate: string;
@@ -393,24 +407,30 @@ function integratedSystemContentReplacements(data: NormalizedExportData): Array<
   ];
 
   const isWoodProcessing = /дърводобив|дървопреработ|дървен материал|дървесин/i.test(data.activity);
-  const activity = data.activity;
-  const physicalScope = data.physicalScope || data.address || "работните площадки и обектите на организацията";
+  const activity = sentenceFragment(data.activity);
+  const productsServices = sentenceFragment(data.productsServices || activity);
+  const physicalScope = sentenceFragment(data.physicalScope || data.address || "работните площадки и обектите на организацията");
   const context = data.organizationContext || `Организацията извършва ${activity} при спазване на приложимите изисквания за качество, околна среда и здраве и безопасност при работа.`;
-  const processes = data.processesDescription || (isWoodProcessing
+  const processes = sentenceFragment(data.processesDescription || (isWoodProcessing
     ? "планиране и управление, дърводобив, транспорт, разтоварване, първична и вторична обработка на дървесина, сушене и складиране, пакетиране, експедиция, контрол на качеството и поддръжка"
-    : `планиране, изпълнение и контрол на дейностите по ${activity}, доставки, складиране, обслужване на клиенти, мониторинг, одити и подобрение`);
+    : `планиране, изпълнение и контрол на дейностите по ${activity}, доставки, складиране, обслужване на клиенти, мониторинг, одити и подобрение`));
   const policyFocus = isWoodProcessing
     ? "Ориентиране към клиенти и други заинтересовани страни – постоянно подобряваме дърводобива и дървопреработването, контрола на фасонирания дървен материал и производствените процеси. Управляваме дървесния прах, шума, отпадъчната дървесина и рисковете при работа с машини, транспорт и товаро-разтоварни дейности, като спазваме приложимите законови и други изисквания."
     : `Ориентиране към клиенти и други заинтересовани страни – постоянно наблюдаваме и подобряваме процесите, свързани с ${activity}. Управляваме качеството, въздействията върху околната среда и рисковете за здравето и безопасността при работа, като спазваме приложимите законови и други изисквания.`;
-  const environmentalAspects = isWoodProcessing
+  const environmentalAspects = sentenceFragment(data.environmentalAspects || (isWoodProcessing
     ? "Дървесни остатъци, стърготини, кори и дървесен прах; шум от дърводобивна и дървообработваща техника; разход на горива и смазочни материали; отработени масла, филтри, гуми и опаковки; емисии от транспорт и риск от разливи."
-    : `Отпадъци, емисии, шум, потребление на ресурси и други въздействия, възникващи при ${activity}.`;
-  const operationalControls = isWoodProcessing
-    ? "Дървесните остатъци, стърготините, корите и прахът се събират разделно и се оползотворяват или предават по приложимия ред. Отработените масла, филтрите, гумите и опаковките се съхраняват обозначено и се предават на правоспособни лица. Контролират се прахът, шумът, техническата изправност на машините, транспортът и товаро-разтоварните дейности."
-    : `Отпадъците и емисиите от ${activity} се идентифицират, събират, съхраняват и предават по приложимия ред. Контролират се ресурсите, техническата изправност, работната среда и рисковете при изпълнение на процесите.`;
-  const operationalRisks = isWoodProcessing
+    : `Отпадъци, емисии, шум, потребление на ресурси и други въздействия, възникващи при ${activity}.`));
+  const occupationalRisks = sentenceFragment(data.occupationalRisks || (isWoodProcessing
     ? "работа с дърводобивна и дървообработваща техника, режещи инструменти, движещи се части, дървесен прах, шум, пожар, транспорт и товаро-разтоварни дейности"
-    : `оборудването, работната среда, транспорта, доставките и изпълнението на ${activity}`;
+    : `оборудването, работната среда, транспорта, доставките и изпълнението на ${activity}`));
+  const externalParties = sentenceFragment(data.externalParties || "клиенти, доставчици, контролни органи и външни изпълнители");
+  const operationalControls = sentenceFragment(data.wasteManagement || (isWoodProcessing
+    ? "Дървесните остатъци, стърготините, корите и прахът се събират разделно и се оползотворяват или предават по приложимия ред. Отработените масла, филтрите, гумите и опаковките се съхраняват обозначено и се предават на правоспособни лица. Контролират се прахът, шумът, техническата изправност на машините, транспортът и товаро-разтоварните дейности."
+    : `Отпадъците и емисиите от ${activity} се идентифицират, събират, съхраняват и предават по приложимия ред. Контролират се ресурсите, техническата изправност, работната среда и рисковете при изпълнение на процесите.`));
+  const postDeliveryActivities = sentenceFragment(data.postDeliveryActivities || "експедиция и доставка, проследяване на удовлетвореността, разглеждане на рекламации и предприемане на коригиращи действия");
+  const designDescription = data.designDevelopment === "not_applicable"
+    ? `Проектирането и разработването по смисъла на ISO 9001 не е приложимо. ${data.companyName} изпълнява утвърдени процеси за ${activity} и управлява промените в изискванията, технологиите и документацията по контролиран ред.`
+    : `Проектирането и разработването е приложимо за ${productsServices}. Входните изисквания се преглеждат, планират се етапи, отговорности, ресурси, проверки и валидиране, а всички промени се идентифицират, одобряват и проследяват.`;
   const mission = `${data.companyName} развива ${activity}. Организацията изгражда дългосрочни отношения с клиентите и заинтересованите страни чрез постоянно качество, опазване на околната среда, безопасни условия на труд и непрекъснато подобрение.`;
   const siteDescription = `${data.companyName} изпълнява дейността си в рамките на следния физически обхват: ${physicalScope}. Прилагат се контролирани условия за инфраструктурата, машините, складовете, транспорта, работната среда и управлението на отпадъците.`;
   const companyPresentation = `Специализация – ${data.companyName} извършва ${activity}. ${context}`;
@@ -501,7 +521,7 @@ function integratedSystemContentReplacements(data: NormalizedExportData): Array<
       "6.„ЕКОБУЛ ПАРТНЕР“ ООД разработва и разполага с план за действие в кризисни ситуации, който осигурява продължаването и поддържането за достатъчно дълъг период нормалната работа на посредника при спазване на законоустановените норми за дейността.",
       `6. ${data.companyName} поддържа план за действие при кризисни и извънредни ситуации, който осигурява продължаване или своевременно възстановяване на критичните процеси при спазване на приложимите изисквания.`
     ],
-    ["2.Риск, свързан с финансови средства с незаконен произход.", `2. Рискове, свързани с ${operationalRisks}.`],
+    ["2.Риск, свързан с финансови средства с незаконен произход.", `2. Рискове, свързани с ${occupationalRisks}.`],
     [
       "5.да се ангажират отделните отдели в процеса по установяване и оценка на риска, като по този начин се постига по-голяма отговорност на служителите на посредника за управлението на рисковете.",
       `5. Да се ангажират всички звена в процеса по установяване и оценка на риска, като се повишава отговорността на служителите на ${data.companyName} за управлението на рисковете.`
@@ -551,6 +571,59 @@ function integratedSystemContentReplacements(data: NormalizedExportData): Array<
     [
       "4.7.5.Генерирани отпадъци от всички дейности извършвани от Дружеството, тяхното събиране, транспорт и депониране.",
       `4.7.5. ${operationalControls}`
+    ],
+    [
+      "Площадката на  „ЕКОБУЛ ПАРТНЕР“ ООД за съхраняване на отпадъците отговаря на изискванията за това тя да бъде оградена, охраняема, с осигурени комуникации и изградена инфраструктура. Приетите отпадъци се съхраняват в обособени зони обозначени и маркирани със стикер  със съответния код на отпадъка.",
+      `Генерираните отпадъци от дейността на ${data.companyName} се управляват по следния ред: ${operationalControls}`
+    ],
+    [
+      "Определени като външни обстоятелства са: Съществуващите правни норми - местно законодателство и законодателство на Европейският съюз, технологични – съществуващи технически стандарти, нормали и изисквания към продуктите  които произвежда компанията, конкурентни в областта на производството на промишлено оборудване, пазарни, социални и икономически условия. Тези обстоятелства могат да влияят както положително, така и отрицателно върху възможностите на компанията да постига своите цели и развитие. За тази цел в \"ЕКОБУЛ ПАРТНЕР\" ООД съществува процес за следене и анализиране на тези външни обстоятелства като Управителят разпределя отговорностите за това. Като вътрешни обстоятелства са идентифицирани и отчетени натрупаните знания и опит, вътрешно-фирмени ценности, култура, наличието на квалифициран персонал, технологичното оборудване, финансовата стабилност на фирмата. Вътрешните обстоятелства се управляват и наблюдават със дефинирани процеси по управление на персонала, поддръжка на оборудване, архивиране на знанията под формата на технологии, чертежи, създадените процеси за вътрешна комуникация.",
+      `${context} Външните обстоятелства включват приложимото законодателство, техническите и стандартните изисквания, пазара и конкуренцията при ${productsServices}, икономическите и социалните условия и очакванията на ${externalParties}. Вътрешните обстоятелства включват знанията и опита, персонала, инфраструктурата, технологиите, ресурсите, организационната култура и финансовата устойчивост. Управителят определя отговорности за периодично наблюдение и преглед на тези фактори.`
+    ],
+    [
+      "Фирмата е създала организация, така че когато се изменят изискванията от страна на клиент или други изисквания, съответната документирана информация /чертежи, договори и др./ е изменена, съответният персонал е информиран за изменените изисквания /посредством изменената документация/, когато са променени изискванията за продуктите и услугите.",
+      `При промяна на клиентски, нормативни или други изисквания към ${productsServices}, приложимите заявки, договори, спецификации, технологични инструкции и други документи се актуализират, а засегнатият персонал се информира своевременно.`
+    ],
+    [
+      "Проектиране и разработване на нови продукти се налага в случаите, когато изискването на клиента не може да бъде изпълнено със съществуващите готови, разработени и утвърдени във фирмата модули и готови решения. В този случай процеса на проектиране преминава през следните етапи:",
+      designDescription
+    ],
+    [
+      "Планиране на проектирането и разработването – Това е началният етап на проектирането, в който управителя взема решение за стартиране на проектиране на нов модул. Това решение се оформя в заповед, в която се посочва:",
+      data.designDevelopment === "not_applicable"
+        ? "Промените в процесите, технологиите, ресурсите и изискванията се планират и одобряват от Управителя, като се определят отговорности, срокове, проверки и необходимите записи."
+        : `Планирането на проектирането и разработването за ${productsServices} определя етапите, отговорностите, необходимите ресурси, входните и изходните данни, проверката, валидирането и критериите за приемане.`
+    ],
+    [
+      "Изменение при проектирането и разработването – По време на проектирането е възможно да се получат изменения-поискани от клиента, наложени от резултатите в някой от етапите. Изменения могат да се получат и след края на процеса на проектиране – при инсталиране и внедряване на новия продукт в редовно производство. Във всички случаи на изменения, \"ЕКОБУЛ ПАРТНЕР\" ООД извършва отразяване на измененията в съответния документ по начин, по който гарантира недвусмисленост на информацията, отразява кога е извършено изменението, кой е извършил изменението. За вземането на решение за извършване на изменения в продуктите и резултатите от проектирането се създава заповед, която отразява какво следва да бъде променено и кой следва да го промени. Всички промени се документират. Измененията в техническата документация се нанасят с подпис на лицето извършило промените, а след това се отразяват в документацията съхранявана на сървъра, като съответния документ или чертеж се променя и се индексира с дата на промяната и променена версия в идентификационния номер.",
+      `Промените в изискванията, процесите, технологиите и документацията се идентифицират, преглеждат и одобряват преди прилагане. ${data.companyName} документира причината, обхвата, отговорното лице, датата, версията, резултатите от проверката и необходимите действия за предотвратяване на неблагоприятни последствия.`
+    ],
+    [
+      "Текуща оперативна координация на дейностите по монтаж на обекта при клиента се осъществява от Управителя, която включва и периодично или инцидентно посещение на обекта и разговори с представители на клиента.",
+      `Текущата оперативна координация на процесите по ${activity} се осъществява от Управителя и определените отговорни лица. Тя включва наблюдение на ${processes}, комуникация с клиента и контрол на ${postDeliveryActivities}.`
+    ],
+    [
+      "При начало на работа по нов обект се осигуряват нормите и изискванията за защита на околната среда, и работещия персонал, и населението. В тази насока се спазва проектът, утвърден от Инвеститора. Управлението на работната среда изисква от ръководния персонал, стриктно спазване на изискванията за опазване на околната среда и осигуряване на здравословни и безопасни условия на труд, и недопускане на възможности за възникване на потенциално рискови ситуации. За всички случаи на управление на здраве и безопасност при работа се прилагат изискванията на нормативната база.",
+      `Преди започване на работа на нова площадка, обект или процес в рамките на ${physicalScope} се оценяват приложимите изисквания за околната среда и безопасността на работещите и засегнатите страни. Ръководният персонал осигурява контрол на рисковете, свързани с ${occupationalRisks}, и прилага нормативните, технологичните и вътрешните изисквания.`
+    ],
+    ["a.клиентите/инвеститорите,", `a. ${externalParties},`],
+    ["a.Обмен на информация с клиентите/инвеститорите;", `a. Обмен на информация с ${externalParties};`],
+    [
+      "4. да организират безопасно съхраняване на отпадъците, за които няма подходящи средства за третирането им;",
+      `4. Да организират разделно събиране и безопасно временно съхраняване на отпадъците до тяхното оползотворяване или предаване на правоспособни лица;`
+    ],
+    [
+      "Транспортиране и предаване на отпадъци на изградени за целта депа, съгласно съответните нормативи и правила",
+      "Транспортиране и предаване на отпадъците на правоспособни лица или оператори съгласно приложимите нормативни изисквания и вътрешни правила"
+    ],
+    ["Депониране на отпадъци", "Предаване и оползотворяване на отпадъци"],
+    [
+      "осигуряване на методи и средства за разделно временно съхранение на отпадъци, преди транспортирането им до съответните депа;",
+      "осигуряване на методи и средства за разделно временно съхранение на отпадъците преди тяхното оползотворяване или предаване на правоспособни лица;"
+    ],
+    [
+      "доставяне на отпадъци само на определени за целта депа.",
+      "предаване на отпадъците само на правоспособни лица или оператори по приложимия ред."
     ]
   ];
 }
@@ -582,6 +655,12 @@ export const iso90011400145001ExportConfig: IsoExportConfig = {
     },
     { label: "чужд процес по проектиране и сервиз", patterns: ["изготвен прототип", "гаранционно и извън гаранционно обслужване"] },
     { label: "строителен профил", patterns: ["строителните обекти", "строителни площадки", "Техническият ръководител"] },
+    { label: "промишлено оборудване", patterns: ["производството на промишлено оборудване"] },
+    { label: "чужди модули, сървър или монтаж", patterns: ["нов модул", "утвърдени във фирмата модули", "монтаж на обекта при клиента", "документацията съхранявана на сървъра"] },
+    { label: "строителен инвеститор", patterns: ["утвърден от Инвеститора", "клиентите/инвеститорите"] },
+    { label: "отпадъци от чужд оператор", patterns: ["Приетите отпадъци се съхраняват", "до съответните депа", "определени за целта депа"] },
+    { label: "стара контролна дата", patterns: ["03.07.21"] },
+    { label: "противоречива година на създаване", patterns: ["създадена през 1994", "създадено през 1994"] },
     { label: "чужда длъжност „заварчик“", patterns: ["досието на заварчика"] },
     { label: "чужда роля „отговорник по монтажа“", patterns: ["отговорника по монтажа"] }
   ],
@@ -622,7 +701,10 @@ export const iso90011400145001ExportConfig: IsoExportConfig = {
         ["25.05.2009 г.", `${formatDate(date)} г.`],
         ["25.05.2009", formatDate(date)],
         ["основана през 1994 г.", `основана на ${formatLongDate(date)}`],
-        ["основана през 1994 година", `основана на ${formatLongDate(date)}`]
+        ["основана през 1994 година", `основана на ${formatLongDate(date)}`],
+        ["създадена през 1994 г.", `създадена на ${formatLongDate(date)}`],
+        ["създадена през 1994 година", `създадена на ${formatLongDate(date)}`],
+        ["създадено през 1994 г.", `създадено на ${formatLongDate(date)}`]
       ]),
       ...replacementsWhen(data.email, (email) => [["office@ecobul.eu", email]]),
       ...replacementsWhen(data.phone, (phone) => [["0897550025", phone]]),
@@ -666,7 +748,10 @@ export const iso90011400145001ExportConfig: IsoExportConfig = {
           ["25.10.2021г.", `${formatted} г.`],
           ["25.10.2021", formatted],
           ["03.07.2021г.", `${formatted} г.`],
-          ["03.07.2021", formatted]
+          ["03.07.2021", formatted],
+          ["03.07.21 г.", `${formatted} г.`],
+          ["03.07.21г.", `${formatted} г.`],
+          ["03.07.21", formatted]
         ];
       }),
       ...(data.currentYear === undefined ? [] : [
@@ -760,6 +845,7 @@ export async function loadActiveTemplatePackage(request: NextRequest, standard: 
 
 export async function createIsoSystemArchive(body: IsoExportRequest, config: IsoExportConfig, templatePackage?: Buffer) {
   const data = normalizeRequest(body);
+  validateExportContext(data, config);
   const templateRoot = path.join(process.cwd(), "templates", config.templateDirectory);
   const files = templatePackage ? templateFilesFromZip(templatePackage) : await walk(templateRoot);
   if (!files.length) throw new Error(`Няма налични шаблони за ${config.code}.`);
@@ -828,7 +914,11 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
     ...summaryWhen(data.activity, "Обхват на дейност"), ...summaryWhen(data.scope, "Обхват"),
     ...summaryWhen(data.physicalScope, "Физически обхват"),
     ...summaryWhen(data.organizationContext, "Контекст на организацията"),
-    ...summaryWhen(data.processesDescription, "Процеси"), ...summaryWhen(data.trainingDetails, "Обучения"),
+    ...summaryWhen(data.processesDescription, "Процеси"), ...summaryWhen(data.productsServices, "Продукти и услуги"),
+    ...summaryWhen(data.environmentalAspects, "Екологични аспекти"), ...summaryWhen(data.occupationalRisks, "Рискове по ЗБУТ"),
+    ...summaryWhen(data.externalParties, "Външни заинтересовани страни"), ...summaryWhen(data.wasteManagement, "Управление на отпадъците"),
+    ...summaryWhen(data.designDevelopment, "Проектиране и разработване"), ...summaryWhen(data.postDeliveryActivities, "Дейности след доставка"),
+    ...summaryWhen(data.trainingDetails, "Обучения"),
     ...summaryWhen(data.internalAuditDate ? formatDate(data.internalAuditDate) : "", "Вътрешен одит"),
     ...summaryWhen(data.managementReviewDate ? formatDate(data.managementReviewDate) : "", "Преглед от ръководството"),
     ...summaryWhen(data.previousYear === undefined ? "" : String(data.previousYear), "Предходна година"),
@@ -910,6 +1000,10 @@ function createExportReport(config: IsoExportConfig, data: NormalizedExportData,
     ["Брой служители", data.employees === undefined ? "" : String(data.employees)], ["Обхват на дейност", data.activity], ["Обхват", data.scope],
     ["Физически обхват", data.physicalScope], ["Дата на системата", data.systemDate],
     ["Контекст на организацията", data.organizationContext], ["Процеси", data.processesDescription],
+    ["Продукти и услуги", data.productsServices], ["Екологични аспекти", data.environmentalAspects],
+    ["Рискове по ЗБУТ", data.occupationalRisks], ["Външни заинтересовани страни", data.externalParties],
+    ["Управление на отпадъците", data.wasteManagement], ["Проектиране и разработване", data.designDevelopment],
+    ["Дейности след доставка", data.postDeliveryActivities],
     ["Обучения", data.trainingDetails], ["Вътрешен одит", data.internalAuditDate],
     ["Преглед от ръководството", data.managementReviewDate],
     ["Предходна година", data.previousYear === undefined ? "" : String(data.previousYear)],
@@ -970,6 +1064,25 @@ function decodeOfficeXml(value: string) {
     .replaceAll("&gt;", ">").replaceAll("&amp;", "&");
 }
 
+function validateExportContext(data: NormalizedExportData, config: IsoExportConfig) {
+  if (config.code !== "ISO 9001-14001-45001") return;
+  const required: Array<[string, unknown]> = [
+    ["ЕИК", data.uic], ["Седалище/адрес", data.address], ["Град", data.city], ["Управител", data.manager],
+    ["Дата на създаване", data.foundedAt], ["Дата на системата/влизане в сила", data.effectiveDate],
+    ["Обхват на дейност", data.activity], ["Продукти и услуги", data.productsServices],
+    ["Физически обхват", data.physicalScope], ["Контекст на организацията", data.organizationContext],
+    ["Процеси", data.processesDescription], ["Екологични аспекти", data.environmentalAspects],
+    ["Рискове по ЗБУТ", data.occupationalRisks], ["Външни заинтересовани страни", data.externalParties],
+    ["Управление на отпадъците", data.wasteManagement], ["Проектиране и разработване", data.designDevelopment],
+    ["Вътрешен одит", data.internalAuditDate], ["Преглед от ръководството", data.managementReviewDate],
+    ["Предходна година", data.previousYear], ["Настояща година", data.currentYear]
+  ];
+  const missing = required
+    .filter(([, value]) => value === undefined || value === null || String(value).trim() === "")
+    .map(([label]) => label);
+  if (missing.length) throw new Error(`Липсват задължителни данни за надеждна адаптация: ${missing.join(", ")}.`);
+}
+
 function normalizeRequest(body: IsoExportRequest): NormalizedExportData {
   const systemDate = optionalText(body.systemDate, 20);
   return {
@@ -981,6 +1094,13 @@ function normalizeRequest(body: IsoExportRequest): NormalizedExportData {
     physicalScope: optionalText(body.physicalScope, 1500), systemDate,
     organizationContext: optionalText(body.organizationContext, 2000),
     processesDescription: optionalText(body.processesDescription, 2000),
+    productsServices: optionalText(body.productsServices, 2000),
+    environmentalAspects: optionalText(body.environmentalAspects, 2500),
+    occupationalRisks: optionalText(body.occupationalRisks, 2500),
+    externalParties: optionalText(body.externalParties, 1500),
+    wasteManagement: optionalText(body.wasteManagement, 2500),
+    designDevelopment: normalizeDesignDevelopment(body.designDevelopment),
+    postDeliveryActivities: optionalText(body.postDeliveryActivities, 2000),
     trainingDetails: optionalText(body.trainingDetails, 1500),
     internalAuditDate: optionalText(body.internalAuditDate, 20),
     managementReviewDate: optionalText(body.managementReviewDate, 20),
@@ -990,6 +1110,10 @@ function normalizeRequest(body: IsoExportRequest): NormalizedExportData {
     logoPngDataUrl: optionalText(body.logoPngDataUrl, 5_800_000),
     aiVisuals: normalizeAiVisuals(body.aiVisuals)
   };
+}
+
+function normalizeDesignDevelopment(value: unknown): NormalizedExportData["designDevelopment"] {
+  return value === "applicable" || value === "not_applicable" ? value : "";
 }
 
 function baseReplacements(data: NormalizedExportData): Array<[string, string]> {
@@ -1003,6 +1127,10 @@ function baseReplacements(data: NormalizedExportData): Array<[string, string]> {
     ["{{SCOPE}}", data.scope], ["{{PHYSICAL_SCOPE}}", data.physicalScope],
     ["{{SYSTEM_DATE}}", data.systemDate ? formatDate(data.systemDate) : ""],
     ["{{ORGANIZATION_CONTEXT}}", data.organizationContext], ["{{PROCESSES}}", data.processesDescription],
+    ["{{PRODUCTS_SERVICES}}", data.productsServices], ["{{ENVIRONMENTAL_ASPECTS}}", data.environmentalAspects],
+    ["{{OCCUPATIONAL_RISKS}}", data.occupationalRisks], ["{{EXTERNAL_PARTIES}}", data.externalParties],
+    ["{{WASTE_MANAGEMENT}}", data.wasteManagement], ["{{DESIGN_DEVELOPMENT}}", data.designDevelopment],
+    ["{{POST_DELIVERY_ACTIVITIES}}", data.postDeliveryActivities],
     ["{{TRAINING_DETAILS}}", data.trainingDetails],
     ["{{INTERNAL_AUDIT_DATE}}", data.internalAuditDate ? formatDate(data.internalAuditDate) : ""],
     ["{{MANAGEMENT_REVIEW_DATE}}", data.managementReviewDate ? formatDate(data.managementReviewDate) : ""],
@@ -1117,6 +1245,10 @@ function safeName(value: string) {
 
 function cleanCityName(value: string) {
   return value.replace(/^(?:гр\.?|с\.?)\s*/iu, "").trim();
+}
+
+function sentenceFragment(value: string) {
+  return value.trim().replace(/[.;,:]+\s*$/u, "");
 }
 
 function replaceExportPath(value: string, sourceNames: string[] | undefined, data: NormalizedExportData) {

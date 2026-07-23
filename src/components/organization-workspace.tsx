@@ -36,6 +36,8 @@ const emptyOrganization: Organization = {
   id: "", name: "", uic: "", legalForm: "", address: "", city: "", manager: "", foundedAt: "",
   representative: "", contactName: "", contactPhone: "", contactEmail: "", employees: 0, activity: "",
   physicalScope: "", systemDate: "", organizationContext: "", processesDescription: "", trainingDetails: "",
+  productsServices: "", environmentalAspects: "", occupationalRisks: "", externalParties: "",
+  wasteManagement: "", designDevelopment: "", postDeliveryActivities: "",
   internalAuditDate: "", managementReviewDate: "", previousYear: undefined, currentYear: undefined,
   sites: 1, standards: ["ISO 9001"], status: "draft", readiness: 0, nextAuditDate: ""
 };
@@ -185,6 +187,7 @@ export function OrganizationWorkspace({ view }: { view: "dashboard" | "organizat
   const dossier = organizations.find((item) => item.id === dossierId) ?? null;
   const dossierCertificates = certificates.filter((item) => item.organizationId === dossierId).sort((a, b) => (a.nextCertificationDate || "9999").localeCompare(b.nextCertificationDate || "9999"));
   const dossierHistory = history.filter((item) => item.organizationId === dossierId).sort((a, b) => b.eventDate.localeCompare(a.eventDate));
+  const requiresIntegratedContext = editing?.standards.includes("ISO 9001-14001-45001") ?? false;
 
   function openNew() {
     setError("");
@@ -229,6 +232,21 @@ export function OrganizationWorkspace({ view }: { view: "dashboard" | "organizat
     if (!editing) return;
     if (!editing.name.trim() || !editing.uic.trim()) return setError("Името на фирмата и ЕИК са задължителни.");
     if (!editing.standards.length) return setError("Изберете поне един ISO стандарт.");
+    if (editing.standards.includes("ISO 9001-14001-45001")) {
+      const requiredContext: Array<[string, unknown]> = [
+        ["седалище/адрес", editing.address], ["град", editing.city], ["управител", editing.manager],
+        ["дата на създаване", editing.foundedAt], ["дата на системата", editing.systemDate],
+        ["обхват на дейност", editing.activity], ["продукти и услуги", editing.productsServices],
+        ["физически обхват", editing.physicalScope], ["контекст на организацията", editing.organizationContext],
+        ["процеси", editing.processesDescription], ["екологични аспекти", editing.environmentalAspects],
+        ["рискове по ЗБУТ", editing.occupationalRisks], ["външни заинтересовани страни", editing.externalParties],
+        ["управление на отпадъците", editing.wasteManagement], ["проектиране и разработване", editing.designDevelopment],
+        ["дата на вътрешен одит", editing.internalAuditDate], ["дата на преглед от ръководството", editing.managementReviewDate],
+        ["предходна година", editing.previousYear], ["настояща година", editing.currentYear]
+      ];
+      const missing = requiredContext.filter(([, value]) => value === undefined || value === null || String(value).trim() === "").map(([label]) => label);
+      if (missing.length) return setError(`За ISO 9001-14001-45001 попълнете: ${missing.join(", ")}.`);
+    }
     const exists = organizations.some((item) => item.id === editing.id);
     if (supabase && user) {
       setSyncing(true);
@@ -374,13 +392,13 @@ export function OrganizationWorkspace({ view }: { view: "dashboard" | "organizat
           <Field label="Име на фирмата *"><input autoFocus placeholder="ЕКОБУЛ ПАРТНЕР ООД" required value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
           <Field label="ЕИК *"><input inputMode="numeric" placeholder="206395182" required value={editing.uic} onChange={(e) => setEditing({ ...editing, uic: e.target.value })} /></Field>
           <Field label="Правна форма"><input placeholder="ООД" value={editing.legalForm ?? ""} onChange={(e) => setEditing({ ...editing, legalForm: e.target.value })} /></Field>
-          <Field label="Град"><input placeholder="Пазарджик" value={editing.city ?? ""} onChange={(e) => setEditing({ ...editing, city: e.target.value })} /></Field>
-          <Field label="Седалище/адрес"><input placeholder="гр. Пазарджик, ул. Найчо Цанов №11" value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} /></Field>
-          <Field label="Дата на създаване на фирмата"><input type="date" value={editing.foundedAt ?? ""} onChange={(e) => setEditing({ ...editing, foundedAt: e.target.value })} /></Field>
+          <Field label={`Град${requiresIntegratedContext ? " *" : ""}`}><input placeholder="Пазарджик" value={editing.city ?? ""} onChange={(e) => setEditing({ ...editing, city: e.target.value })} /></Field>
+          <Field label={`Седалище/адрес${requiresIntegratedContext ? " *" : ""}`}><input placeholder="гр. Пазарджик, ул. Найчо Цанов №11" value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} /></Field>
+          <Field label={`Дата на създаване на фирмата${requiresIntegratedContext ? " *" : ""}`}><input type="date" value={editing.foundedAt ?? ""} onChange={(e) => setEditing({ ...editing, foundedAt: e.target.value })} /></Field>
           <Field label="Имейл"><input placeholder="office@ecobul.eu" type="email" value={editing.contactEmail} onChange={(e) => setEditing({ ...editing, contactEmail: e.target.value })} /></Field>
           <Field label="Телефон"><input placeholder="0897550025" value={editing.contactPhone ?? ""} onChange={(e) => setEditing({ ...editing, contactPhone: e.target.value })} /></Field>
-          <Field label="Управител"><input placeholder="Николай Вилинов Острев" value={editing.manager} onChange={(e) => setEditing({ ...editing, manager: e.target.value })} /></Field>
-          <Field label="Дата на системата"><input type="date" value={editing.systemDate ?? ""} onChange={(e) => {
+          <Field label={`Управител${requiresIntegratedContext ? " *" : ""}`}><input placeholder="Николай Вилинов Острев" value={editing.manager} onChange={(e) => setEditing({ ...editing, manager: e.target.value })} /></Field>
+          <Field label={`Дата на системата${requiresIntegratedContext ? " *" : ""}`}><input type="date" value={editing.systemDate ?? ""} onChange={(e) => {
             const systemDate = e.target.value;
             setEditing({
               ...editing,
@@ -389,18 +407,26 @@ export function OrganizationWorkspace({ view }: { view: "dashboard" | "organizat
               managementReviewDate: editing.managementReviewDate || addDays(systemDate, 17)
             });
           }} /></Field>
-          <TextAreaField label="Обхват на дейност" placeholder="Складиране, съхранение, обработка, разглобяване, сортиране и разкомплектоване на отпадъчни тонер касети" value={editing.activity} onChange={(value) => setEditing({ ...editing, activity: value })} />
-          <TextAreaField label="Физически обхват" placeholder="Работни площадки, складове, административни помещения, инфраструктура, информационни системи" value={editing.physicalScope ?? ""} onChange={(value) => setEditing({ ...editing, physicalScope: value })} />
+          <TextAreaField label={`Обхват на дейност${requiresIntegratedContext ? " *" : ""}`} placeholder="Опишете реалната основна дейност на фирмата" value={editing.activity} onChange={(value) => setEditing({ ...editing, activity: value })} />
+          <TextAreaField label={`Физически обхват${requiresIntegratedContext ? " *" : ""}`} placeholder="Работни площадки, цехове, складове, административни помещения, транспорт и инфраструктура" value={editing.physicalScope ?? ""} onChange={(value) => setEditing({ ...editing, physicalScope: value })} />
           <fieldset className="sm:col-span-2"><legend className="mb-2 text-sm font-medium text-ink">ISO стандарти *</legend><div className="grid gap-2 sm:grid-cols-3">{standardOptions.map((standard) => <label className="flex cursor-pointer items-center gap-2 rounded border border-line px-3 py-2 text-sm hover:bg-panel" key={standard}><input checked={editing.standards.includes(standard)} className="h-4 w-4 accent-blue-600" onChange={(e) => setEditing({ ...editing, standards: e.target.checked ? [...editing.standards, standard] : editing.standards.filter((item) => item !== standard) })} type="checkbox" />{standard}</label>)}</div></fieldset>
 
           <FormSectionTitle title="Данни за системата" />
-          <TextAreaField label="Контекст на организацията" placeholder="Описание на дейността, вътрешните и външните фактори на фирмата" value={editing.organizationContext ?? ""} onChange={(value) => setEditing({ ...editing, organizationContext: value })} />
-          <TextAreaField label="Процеси" placeholder="Управление, услуги, доставки, склад, клиенти, одити, несъответствия и др." value={editing.processesDescription ?? ""} onChange={(value) => setEditing({ ...editing, processesDescription: value })} />
+          {requiresIntegratedContext ? <div className="rounded border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 sm:col-span-2"><p className="font-semibold">Задължителен контекст за интегрираната система</p><p className="mt-1 text-xs leading-5">Тези данни се въвеждат веднъж и се използват за премахване на чужди секторни текстове във всички следващи версии и сертификации.</p></div> : null}
+          <TextAreaField label={`Продукти и услуги${requiresIntegratedContext ? " *" : ""}`} placeholder="Например: фасониран дървен материал, сушен дървен материал, транспорт и доставка" value={editing.productsServices ?? ""} onChange={(value) => setEditing({ ...editing, productsServices: value })} />
+          <TextAreaField label={`Контекст на организацията${requiresIntegratedContext ? " *" : ""}`} placeholder="Пазар, конкуренти, законови изисквания, технологии, персонал, ресурси и вътрешни фактори" value={editing.organizationContext ?? ""} onChange={(value) => setEditing({ ...editing, organizationContext: value })} />
+          <TextAreaField label={`Процеси${requiresIntegratedContext ? " *" : ""}`} placeholder="Например: заявка, добив, транспорт, разтоварване, обработка, сушене, складиране, пакетиране и експедиция" value={editing.processesDescription ?? ""} onChange={(value) => setEditing({ ...editing, processesDescription: value })} />
+          <TextAreaField label={`Екологични аспекти${requiresIntegratedContext ? " *" : ""}`} placeholder="Например: дървесен прах, шум, дървесни остатъци, ГСМ, емисии, масла, филтри и опаковки" value={editing.environmentalAspects ?? ""} onChange={(value) => setEditing({ ...editing, environmentalAspects: value })} />
+          <TextAreaField label={`Рискове по ЗБУТ${requiresIntegratedContext ? " *" : ""}`} placeholder="Например: машини, режещи инструменти, движещи се части, прах, шум, пожар, транспорт и товаро-разтоварни дейности" value={editing.occupationalRisks ?? ""} onChange={(value) => setEditing({ ...editing, occupationalRisks: value })} />
+          <TextAreaField label={`Външни заинтересовани страни${requiresIntegratedContext ? " *" : ""}`} placeholder="Например: клиенти, доставчици, контролни органи, външни изпълнители и местна общност" value={editing.externalParties ?? ""} onChange={(value) => setEditing({ ...editing, externalParties: value })} />
+          <TextAreaField label={`Управление на отпадъците${requiresIntegratedContext ? " *" : ""}`} placeholder="Как се събират, съхраняват, оползотворяват и предават отпадъците на правоспособни лица" value={editing.wasteManagement ?? ""} onChange={(value) => setEditing({ ...editing, wasteManagement: value })} />
+          <Field label={`Проектиране и разработване${requiresIntegratedContext ? " *" : ""}`}><select value={editing.designDevelopment ?? ""} onChange={(e) => setEditing({ ...editing, designDevelopment: e.target.value as Organization["designDevelopment"] })}><option value="">Изберете приложимост</option><option value="not_applicable">Не е приложимо</option><option value="applicable">Приложимо е</option></select></Field>
+          <TextAreaField label="Дейности след доставка" placeholder="Например: експедиция, доставка, обратна връзка, рекламации и коригиращи действия" value={editing.postDeliveryActivities ?? ""} onChange={(value) => setEditing({ ...editing, postDeliveryActivities: value })} />
           <TextAreaField label="Обучения" placeholder="05.01.2022 г., обучител „Сириус Груп С“ ЕООД" value={editing.trainingDetails ?? ""} onChange={(value) => setEditing({ ...editing, trainingDetails: value })} />
-          <Field label="Вътрешен одит"><input type="date" value={editing.internalAuditDate ?? ""} onChange={(e) => setEditing({ ...editing, internalAuditDate: e.target.value })} /></Field>
-          <Field label="Преглед от ръководството"><input type="date" value={editing.managementReviewDate ?? ""} onChange={(e) => setEditing({ ...editing, managementReviewDate: e.target.value })} /></Field>
-          <Field label="Предходна година"><input inputMode="numeric" max="2200" min="1900" placeholder="2025" type="number" value={editing.previousYear ?? ""} onChange={(e) => setEditing({ ...editing, previousYear: e.target.value ? Number(e.target.value) : undefined })} /></Field>
-          <Field label="Настояща година"><input inputMode="numeric" max="2200" min="1900" placeholder="2026" type="number" value={editing.currentYear ?? ""} onChange={(e) => setEditing({ ...editing, currentYear: e.target.value ? Number(e.target.value) : undefined })} /></Field>
+          <Field label={`Вътрешен одит${requiresIntegratedContext ? " *" : ""}`}><input type="date" value={editing.internalAuditDate ?? ""} onChange={(e) => setEditing({ ...editing, internalAuditDate: e.target.value })} /></Field>
+          <Field label={`Преглед от ръководството${requiresIntegratedContext ? " *" : ""}`}><input type="date" value={editing.managementReviewDate ?? ""} onChange={(e) => setEditing({ ...editing, managementReviewDate: e.target.value })} /></Field>
+          <Field label={`Предходна година${requiresIntegratedContext ? " *" : ""}`}><input inputMode="numeric" max="2200" min="1900" placeholder="2025" type="number" value={editing.previousYear ?? ""} onChange={(e) => setEditing({ ...editing, previousYear: e.target.value ? Number(e.target.value) : undefined })} /></Field>
+          <Field label={`Настояща година${requiresIntegratedContext ? " *" : ""}`}><input inputMode="numeric" max="2200" min="1900" placeholder="2026" type="number" value={editing.currentYear ?? ""} onChange={(e) => setEditing({ ...editing, currentYear: e.target.value ? Number(e.target.value) : undefined })} /></Field>
 
           <FormSectionTitle title="Допълнителни административни данни" />
           <Field label="Представител на ръководството"><input value={editing.representative ?? ""} onChange={(e) => setEditing({ ...editing, representative: e.target.value })} /></Field>
@@ -490,6 +516,13 @@ type OrganizationRow = {
   system_date: string | null;
   organization_context: string | null;
   processes_description: string | null;
+  products_services: string | null;
+  environmental_aspects: string | null;
+  occupational_risks: string | null;
+  external_parties: string | null;
+  waste_management: string | null;
+  design_development: Organization["designDevelopment"] | null;
+  post_delivery_activities: string | null;
   training_details: string | null;
   internal_audit_date: string | null;
   management_review_date: string | null;
@@ -522,6 +555,13 @@ function fromDatabase(value: OrganizationRow): Organization {
     systemDate: value.system_date ?? "",
     organizationContext: value.organization_context ?? "",
     processesDescription: value.processes_description ?? "",
+    productsServices: value.products_services ?? "",
+    environmentalAspects: value.environmental_aspects ?? "",
+    occupationalRisks: value.occupational_risks ?? "",
+    externalParties: value.external_parties ?? "",
+    wasteManagement: value.waste_management ?? "",
+    designDevelopment: value.design_development ?? "",
+    postDeliveryActivities: value.post_delivery_activities ?? "",
     trainingDetails: value.training_details ?? "",
     internalAuditDate: value.internal_audit_date ?? "",
     managementReviewDate: value.management_review_date ?? "",
@@ -556,6 +596,13 @@ function toDatabase(value: Organization, ownerId: string) {
     system_date: value.systemDate || null,
     organization_context: value.organizationContext?.trim() || null,
     processes_description: value.processesDescription?.trim() || null,
+    products_services: value.productsServices?.trim() || null,
+    environmental_aspects: value.environmentalAspects?.trim() || null,
+    occupational_risks: value.occupationalRisks?.trim() || null,
+    external_parties: value.externalParties?.trim() || null,
+    waste_management: value.wasteManagement?.trim() || null,
+    design_development: value.designDevelopment || null,
+    post_delivery_activities: value.postDeliveryActivities?.trim() || null,
     training_details: value.trainingDetails?.trim() || null,
     internal_audit_date: value.internalAuditDate || null,
     management_review_date: value.managementReviewDate || null,

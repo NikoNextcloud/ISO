@@ -12,6 +12,8 @@ export type ExportFieldKey =
   | "companyName" | "uic" | "legalForm" | "address" | "city" | "manager" | "foundedAt" | "representative"
   | "contactName" | "email" | "phone" | "employees" | "activity"
   | "scope" | "physicalScope" | "systemDate" | "organizationContext" | "processesDescription"
+  | "productsServices" | "environmentalAspects" | "occupationalRisks" | "externalParties"
+  | "wasteManagement" | "designDevelopment" | "postDeliveryActivities"
   | "trainingDetails" | "internalAuditDate" | "managementReviewDate" | "previousYear" | "currentYear"
   | "effectiveDate" | "version" | "preparedBy" | "teamMember1" | "teamMember2";
 
@@ -41,6 +43,13 @@ const FIELD_META: Record<ExportFieldKey, { label: string; type: "text" | "email"
   systemDate: { label: "Дата на системата", type: "date" },
   organizationContext: { label: "Контекст на организацията", type: "textarea", fullWidth: true },
   processesDescription: { label: "Процеси", type: "textarea", fullWidth: true },
+  productsServices: { label: "Продукти и услуги", type: "textarea", fullWidth: true },
+  environmentalAspects: { label: "Екологични аспекти", type: "textarea", fullWidth: true },
+  occupationalRisks: { label: "Рискове по ЗБУТ", type: "textarea", fullWidth: true },
+  externalParties: { label: "Външни заинтересовани страни", type: "textarea", fullWidth: true },
+  wasteManagement: { label: "Управление на отпадъците", type: "textarea", fullWidth: true },
+  designDevelopment: { label: "Проектиране и разработване", type: "text" },
+  postDeliveryActivities: { label: "Дейности след доставка", type: "textarea", fullWidth: true },
   trainingDetails: { label: "Обучения", type: "textarea", fullWidth: true },
   internalAuditDate: { label: "Вътрешен одит", type: "date" },
   managementReviewDate: { label: "Преглед от ръководството", type: "date" },
@@ -67,6 +76,8 @@ type ExportForm = {
   companyName: string; uic: string; legalForm: string; address: string; city: string; manager: string; foundedAt: string; representative: string;
   contactName: string; email: string; phone: string; employees: number | ""; activity: string;
   scope: string; physicalScope: string; systemDate: string; organizationContext: string; processesDescription: string;
+  productsServices: string; environmentalAspects: string; occupationalRisks: string; externalParties: string;
+  wasteManagement: string; designDevelopment: string; postDeliveryActivities: string;
   trainingDetails: string; internalAuditDate: string; managementReviewDate: string; previousYear: number | "";
   currentYear: number | ""; effectiveDate: string; version: string; preparedBy: string; teamMember1: string; teamMember2: string;
 };
@@ -76,7 +87,10 @@ type OrganizationRow = {
   manager: string | null; founded_at: string | null; representative: string | null;
   contact_name: string | null; contact_phone: string | null; contact_email: string | null; employees_count: number;
   activity: string | null; physical_scope: string | null; system_date: string | null; organization_context: string | null;
-  processes_description: string | null; training_details: string | null; internal_audit_date: string | null;
+  processes_description: string | null; products_services: string | null; environmental_aspects: string | null;
+  occupational_risks: string | null; external_parties: string | null; waste_management: string | null;
+  design_development: string | null; post_delivery_activities: string | null;
+  training_details: string | null; internal_audit_date: string | null;
   management_review_date: string | null; previous_year: number | null; current_year: number | null;
 };
 
@@ -93,6 +107,8 @@ const emptyForm: ExportForm = {
   companyName: "", uic: "", legalForm: "", address: "", city: "", manager: "", foundedAt: "", representative: "",
   contactName: "", email: "", phone: "", employees: "", activity: "", scope: "", physicalScope: "", systemDate: "",
   organizationContext: "", processesDescription: "", trainingDetails: "", internalAuditDate: "",
+  productsServices: "", environmentalAspects: "", occupationalRisks: "", externalParties: "",
+  wasteManagement: "", designDevelopment: "", postDeliveryActivities: "",
   managementReviewDate: "", previousYear: "", currentYear: "", effectiveDate: "", version: "", preparedBy: "",
   teamMember1: "", teamMember2: ""
 };
@@ -129,6 +145,10 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
         contact_phone: item.contactPhone ?? "", contact_email: item.contactEmail, employees_count: item.employees,
         activity: item.activity, physical_scope: item.physicalScope ?? "", system_date: item.systemDate ?? "",
         organization_context: item.organizationContext ?? "", processes_description: item.processesDescription ?? "",
+        products_services: item.productsServices ?? "", environmental_aspects: item.environmentalAspects ?? "",
+        occupational_risks: item.occupationalRisks ?? "", external_parties: item.externalParties ?? "",
+        waste_management: item.wasteManagement ?? "", design_development: item.designDevelopment ?? "",
+        post_delivery_activities: item.postDeliveryActivities ?? "",
         training_details: item.trainingDetails ?? "", internal_audit_date: item.internalAuditDate ?? "",
         management_review_date: item.managementReviewDate ?? "", previous_year: item.previousYear ?? null,
         current_year: item.currentYear ?? null
@@ -146,8 +166,8 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
   useEffect(() => {
     if (!supabase || !user) { if (supabase) setLoading(false); return; }
     setLoading(true);
-    supabase.from("organizations").select("id,name,uic,legal_form,address,city,manager,founded_at,representative,contact_name,contact_phone,contact_email,employees_count,activity,physical_scope,system_date,organization_context,processes_description,training_details,internal_audit_date,management_review_date,previous_year,current_year").order("name").then(({ data, error: loadError }) => {
-      if (loadError) setError(`Неуспешно зареждане на фирмите: ${loadError.message}. Проверете дали миграция 012 е изпълнена в Supabase.`);
+    supabase.from("organizations").select("id,name,uic,legal_form,address,city,manager,founded_at,representative,contact_name,contact_phone,contact_email,employees_count,activity,physical_scope,system_date,organization_context,processes_description,products_services,environmental_aspects,occupational_risks,external_parties,waste_management,design_development,post_delivery_activities,training_details,internal_audit_date,management_review_date,previous_year,current_year").order("name").then(({ data, error: loadError }) => {
+      if (loadError) setError(`Неуспешно зареждане на фирмите: ${loadError.message}. Проверете дали миграции 012 и 013 са изпълнени в Supabase.`);
       else setOrganizations(data ?? []);
       setLoading(false);
     });
@@ -166,6 +186,10 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
       activity: organization.activity ?? "", scope: organization.activity ?? "", physicalScope: organization.physical_scope ?? "",
       systemDate: organization.system_date ?? "", organizationContext: organization.organization_context ?? "",
       processesDescription: organization.processes_description ?? "", trainingDetails: organization.training_details ?? "",
+      productsServices: organization.products_services ?? "", environmentalAspects: organization.environmental_aspects ?? "",
+      occupationalRisks: organization.occupational_risks ?? "", externalParties: organization.external_parties ?? "",
+      wasteManagement: organization.waste_management ?? "", designDevelopment: organization.design_development ?? "",
+      postDeliveryActivities: organization.post_delivery_activities ?? "",
       internalAuditDate: organization.internal_audit_date ?? "", managementReviewDate: organization.management_review_date ?? "",
       previousYear: organization.previous_year ?? "", currentYear: organization.current_year ?? "",
       effectiveDate: organization.system_date ?? "", preparedBy: "", teamMember1: "", teamMember2: ""
@@ -300,6 +324,9 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
     const baseInput = "focus-ring h-10 rounded border border-line bg-white px-3 text-sm font-normal outline-none";
     if (meta.type === "textarea") {
       return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<textarea className="focus-ring min-h-24 rounded border border-line bg-white p-3 text-sm font-normal outline-none" placeholder={spec.key === "scope" ? config.scopePlaceholder : undefined} required={spec.required} value={form[spec.key] as string} onChange={(event) => setForm({ ...form, [spec.key]: event.target.value })} /></label>;
+    }
+    if (spec.key === "designDevelopment") {
+      return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<select className={baseInput} required={spec.required} value={form.designDevelopment} onChange={(event) => setForm({ ...form, designDevelopment: event.target.value })}><option value="">Изберете приложимост</option><option value="not_applicable">Не е приложимо</option><option value="applicable">Приложимо е</option></select></label>;
     }
     if (spec.key === "employees") {
       return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<input className={baseInput} min="0" required={spec.required} type="number" value={form.employees} onChange={(event) => setForm({ ...form, employees: event.target.value === "" ? "" : Number(event.target.value) })} /></label>;

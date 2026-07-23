@@ -10,7 +10,12 @@ const REQUIRED_PROFILE: Record<IsoStandardCode, Array<keyof Organization>> = {
   "ISO 27001": ["name", "address", "manager"],
   "ISO 50001": ["name", "manager"],
   "ISO 9-20-27": ["name", "uic", "manager"],
-  "ISO 9001-14001-45001": ["name", "uic", "address", "manager"],
+  "ISO 9001-14001-45001": [
+    "name", "uic", "address", "city", "manager", "foundedAt", "systemDate", "activity",
+    "productsServices", "physicalScope", "organizationContext", "processesDescription",
+    "environmentalAspects", "occupationalRisks", "externalParties", "wasteManagement",
+    "designDevelopment", "internalAuditDate", "managementReviewDate", "previousYear", "currentYear"
+  ],
   "ISO 9-14": ["name", "address", "manager"]
 };
 
@@ -48,7 +53,17 @@ function documentMatchesStandard(document: ImsDocument, standard: IsoStandardCod
 }
 
 function profileLabel(key: keyof Organization) {
-  return ({ name: "име", uic: "ЕИК", address: "адрес", manager: "управител" } as Partial<Record<keyof Organization, string>>)[key] ?? String(key);
+  return ({
+    name: "име", uic: "ЕИК", address: "адрес", city: "град", manager: "управител",
+    foundedAt: "дата на създаване", systemDate: "дата на системата", activity: "дейност",
+    productsServices: "продукти и услуги", physicalScope: "физически обхват",
+    organizationContext: "контекст", processesDescription: "процеси",
+    environmentalAspects: "екологични аспекти", occupationalRisks: "рискове по ЗБУТ",
+    externalParties: "заинтересовани страни", wasteManagement: "управление на отпадъците",
+    designDevelopment: "проектиране и разработване", internalAuditDate: "вътрешен одит",
+    managementReviewDate: "преглед от ръководството", previousYear: "предходна година",
+    currentYear: "настояща година"
+  } as Partial<Record<keyof Organization, string>>)[key] ?? String(key);
 }
 
 function formatDate(value: string) { return new Intl.DateTimeFormat("bg-BG").format(new Date(`${value}T00:00:00`)); }
