@@ -1,3 +1,5 @@
+import { buildIsoReviewPrompts } from "@/lib/ai-review-prompt";
+
 const DEFAULT_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
 const DEFAULT_TEXT_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
 
@@ -142,25 +144,12 @@ export async function generateCloudflareTextReview(context: string, items: Array
   }
   if (!items.length) return { response: '{"suggestions":[]}', model: config.reviewModel };
 
+  const prompts = buildIsoReviewPrompts(context, items);
   const systemPrompt = [
-    "Ти си старши български редактор и консултант по ISO системи за управление.",
-    "Преглеждаш текстове от вече попълнени DOCX/XLSX шаблони.",
-    "Предлагай промяна само при реална езикова грешка, смислово противоречие, чужд секторен остатък или несъответствие с предоставения фирмен контекст.",
-    "Не измисляй факти, дати, имена, сертификати, законови изисквания, измервания или резултати.",
-    "Не променяй номера на стандарти, клаузи, кодове на документи и нормативни позовавания.",
-    "Запази пълния смисъл и служебния тон. Пиши само на правилен български език.",
-    "Ако текстът е коректен или няма достатъчно информация, не предлагай промяна.",
+    prompts.system,
     "Върни само валиден JSON обект без Markdown във формат:",
-    '{"suggestions":[{"id":"s1","suggested":"целият коригиран текст","reason":"кратка причина","category":"language|context|consistency|risk","confidence":0.9}]}',
-    "Полето suggested трябва да съдържа целия редактиран текст за съответния id, а не само променената дума."
+    '{"suggestions":[{"id":"s1","suggested":"целият коригиран текст","reason":"кратка причина","category":"language|context|consistency|risk","confidence":0.9}]}'
   ].join(" ");
-  const userPrompt = [
-    "КОНТЕКСТ НА ОРГАНИЗАЦИЯТА:",
-    context || "Няма допълнителен контекст. Не прави смислови предположения.",
-    "",
-    "ТЕКСТОВЕ ЗА ПРОВЕРКА:",
-    JSON.stringify(items)
-  ].join("\n");
 
   const response = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(config.accountId)}/ai/run/${config.reviewModel}`,
@@ -173,7 +162,7 @@ export async function generateCloudflareTextReview(context: string, items: Array
       body: JSON.stringify({
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
+          { role: "user", content: prompts.input }
         ],
         temperature: 0.1,
         max_tokens: 4_096

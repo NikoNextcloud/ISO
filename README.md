@@ -43,7 +43,8 @@
 - Статусният бутон в AI панела проверява реалната Cloudflare връзка: зелено означава работеща конфигурация, а червено показва точната причина за проблема.
 - AI смисловият и езиков преглед анализира текста на всички генерирани DOCX/XLSX файлове след точните фирмени замени. Предложенията са свързани с конкретен файл и показват оригинал, редактируем предложен текст, причина и увереност.
 - Нито една AI текстова промяна не се прилага автоматично. Потребителят може да редактира предложението, да го приеме или откаже, а в окончателния ZIP влизат само приетите корекции.
-- Текстовият преглед използва `@cf/qwen/qwen3-30b-a3b-fp8` по подразбиране, кешира еднаквите прегледи и използва същото ограничение на честотата като останалите платени AI операции.
+- Текстовият преглед предлага избор между `ChatGPT (OpenAI)`, `Cloudflare AI` и автоматичен режим. Автоматичният режим използва OpenAI, когато има `OPENAI_API_KEY`, и преминава към Cloudflare при временен проблем.
+- OpenAI прегледът използва Responses API със строг JSON формат, а Cloudflare използва `@cf/qwen/qwen3-30b-a3b-fp8` по подразбиране. Еднаквите прегледи се кешират и използват общото ограничение на честотата за AI операции.
 
 Генерираният архив съдържа:
 
@@ -100,6 +101,8 @@ CLOUDFLARE_ACCOUNT_ID=YOUR_ACCOUNT_ID
 CLOUDFLARE_API_TOKEN=YOUR_WORKERS_AI_TOKEN
 CLOUDFLARE_AI_IMAGE_MODEL=@cf/black-forest-labs/flux-1-schnell
 CLOUDFLARE_AI_TEXT_MODEL=@cf/qwen/qwen3-30b-a3b-fp8
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY
+OPENAI_REVIEW_MODEL=gpt-5-mini
 ```
 
 Стойностите са в Supabase Dashboard -> Project Settings -> API. Не поставяйте `service_role` ключ във frontend настройките.
@@ -114,6 +117,8 @@ CLOUDFLARE_AI_TEXT_MODEL=@cf/qwen/qwen3-30b-a3b-fp8
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_AI_IMAGE_MODEL` (по избор)
 - `CLOUDFLARE_AI_TEXT_MODEL` (по избор; по подразбиране `@cf/qwen/qwen3-30b-a3b-fp8`)
+- `OPENAI_API_KEY` (необходим за режим `ChatGPT (OpenAI)`)
+- `OPENAI_REVIEW_MODEL` (по избор; по подразбиране `gpt-5-mini`)
 
 Направете нов deployment. Шаблоните за ISO 9001, ISO 14001, ISO 27001, ISO 45001, ISO 50001, ISO 9-20-27, ISO 9001-14001-45001 и ISO 9-14 се включват автоматично във Vercel build-а.
 
