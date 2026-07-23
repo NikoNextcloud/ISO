@@ -13,9 +13,8 @@ export function Iso50001ExportWorkspace() {
       { key: "companyName", required: true, hint: "заглавия, папки, колонтитули" },
       { key: "uic", hint: "заменя ЕИК 206853231" },
       { key: "manager", required: true, hint: "Теодор Серафимов" },
-      { key: "representative", hint: "Невена Кръстева / Емил Ръжев" },
-      { key: "teamMember1", hint: "Елена Ставрева" },
-      { key: "teamMember2", hint: "Константин Цеков" },
+      { key: "representative", hint: "Невена Кръстева" },
+      { key: "preparedBy", hint: "заменя Емил Ръжев/Ръжчев, Елена Ставрева и Константин Цеков" },
       { key: "effectiveDate", required: true },
       { key: "version", required: true },
       { key: "activity", hint: "основна дейност на фирмата" }

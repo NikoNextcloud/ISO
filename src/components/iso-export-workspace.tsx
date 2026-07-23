@@ -11,7 +11,7 @@ import { AiVisualStudio, type AiGeneratedVisual, type AiVisualTarget } from "@/c
 export type ExportFieldKey =
   | "companyName" | "uic" | "address" | "manager" | "representative"
   | "contactName" | "email" | "phone" | "employees" | "activity"
-  | "scope" | "effectiveDate" | "version" | "teamMember1" | "teamMember2";
+  | "scope" | "effectiveDate" | "version" | "preparedBy" | "teamMember1" | "teamMember2";
 
 export type ExportFieldSpec = { key: ExportFieldKey; required?: boolean; hint?: string };
 
@@ -21,6 +21,7 @@ const FIELD_META: Record<ExportFieldKey, { label: string; type: "text" | "email"
   address: { label: "Адрес", type: "text" },
   manager: { label: "Управител", type: "text" },
   representative: { label: "Представител на ръководството", type: "text" },
+  preparedBy: { label: "Изготвил/Отговорник", type: "text" },
   teamMember1: { label: "Член на енергийния екип 1", type: "text" },
   teamMember2: { label: "Член на енергийния екип 2", type: "text" },
   contactName: { label: "Лице за контакт", type: "text" },
@@ -51,7 +52,7 @@ export type IsoExportWorkspaceConfig = {
 type ExportForm = {
   companyName: string; uic: string; address: string; manager: string; representative: string;
   contactName: string; email: string; phone: string; employees: number | ""; activity: string;
-  scope: string; effectiveDate: string; version: string; teamMember1: string; teamMember2: string;
+  scope: string; effectiveDate: string; version: string; preparedBy: string; teamMember1: string; teamMember2: string;
 };
 
 type OrganizationRow = {
@@ -70,7 +71,7 @@ type GeneratedArchive = { url: string; filename: string; blob: Blob };
 
 const emptyForm: ExportForm = {
   companyName: "", uic: "", address: "", manager: "", representative: "", contactName: "", email: "", phone: "",
-  employees: "", activity: "", scope: "", effectiveDate: "", version: "", teamMember1: "", teamMember2: ""
+  employees: "", activity: "", scope: "", effectiveDate: "", version: "", preparedBy: "", teamMember1: "", teamMember2: ""
 };
 
 export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfig }) {
@@ -127,7 +128,7 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
       companyName: organization.name, uic: organization.uic, address: organization.address ?? "", manager: organization.manager ?? "",
       representative: organization.representative ?? organization.manager ?? "", contactName: organization.contact_name ?? "",
       email: organization.contact_email ?? "", phone: organization.contact_phone ?? "", employees: organization.employees_count ?? "",
-      activity: organization.activity ?? "", scope: organization.activity ?? "", teamMember1: "", teamMember2: ""
+      activity: organization.activity ?? "", scope: organization.activity ?? "", preparedBy: "", teamMember1: "", teamMember2: ""
     }));
   }
 

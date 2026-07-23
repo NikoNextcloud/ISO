@@ -18,6 +18,7 @@ export type IsoExportRequest = {
   scope?: string;
   effectiveDate?: string;
   version?: string;
+  preparedBy?: string;
   teamMember1?: string;
   teamMember2?: string;
   logoPngDataUrl?: string;
@@ -43,6 +44,7 @@ type NormalizedExportData = {
   scope: string;
   effectiveDate: string;
   version: string;
+  preparedBy: string;
   teamMember1: string;
   teamMember2: string;
   logoPngDataUrl: string;
@@ -152,10 +154,12 @@ export const iso50001ExportConfig: IsoExportConfig = {
         ["Тодор Серафимов", manager], ["Борислав Тачев", manager], ["Боян Янев", manager]
       ]),
       ...replacementsWhen(data.representative, (representative) => [
-        ["Невена Кръстева", representative], ["Емил Ръжчев", representative], ["Емил Ръжев", representative]
+        ["Невена Кръстева", representative]
       ]),
-      ...replacementsWhen(data.teamMember1, (member) => [["Елена Ставрева", member]]),
-      ...replacementsWhen(data.teamMember2, (member) => [["Константин Цеков", member]]),
+      ...replacementsWhen(data.preparedBy, (preparedBy) => [
+        ["Емил Ръжчев", preparedBy], ["Емил Ръжев", preparedBy],
+        ["Елена Ставрева", preparedBy], ["Константин Цеков", preparedBy]
+      ]),
       ...replacementsWhen(data.uic, (uic) => [["206853231", uic]]),
       ...replacementsWhen(data.activity, (activity) => [
         ["Последните няколко години предприятието насочва все повече дейността си към предоставяне на строителни услуги, в областта на жилищно и нежилищно строителство на сгради в региона на София. Компанията разполага с набор от транспортни средства и техника за извършване на дейностите в обхвата на сертификация.", `${data.companyName} извършва основна дейност: ${activity}.`]
@@ -586,6 +590,7 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
   const summary = [
     `${config.edition} - комплект документация`, `Организация: ${data.companyName}`,
     ...summaryWhen(data.uic, "ЕИК"), ...summaryWhen(data.address, "Адрес"), ...summaryWhen(data.manager, "Управител"),
+    ...summaryWhen(data.preparedBy, "Изготвил/Отговорник"),
     ...summaryWhen(data.activity, "Основна дейност"), ...summaryWhen(data.scope, "Обхват"),
     ...summaryWhen(data.effectiveDate ? formatDate(data.effectiveDate) : "", "Дата на влизане в сила"),
     ...summaryWhen(data.version, "Версия"),
@@ -648,6 +653,7 @@ function createExportReport(config: IsoExportConfig, data: NormalizedExportData,
   const appliedFields = [
     ["Име на фирмата", data.companyName], ["ЕИК", data.uic], ["Адрес", data.address], ["Управител", data.manager],
     ["Представител", data.representative], ["Лице за контакт", data.contactName], ["Имейл", data.email], ["Телефон", data.phone],
+    ["Изготвил/Отговорник", data.preparedBy],
     ["Член на енергийния екип 1", data.teamMember1], ["Член на енергийния екип 2", data.teamMember2],
     ["Брой служители", data.employees === undefined ? "" : String(data.employees)], ["Дейност", data.activity], ["Обхват", data.scope],
     ["Дата", data.effectiveDate], ["Версия", data.version]
@@ -679,7 +685,7 @@ function normalizeRequest(body: IsoExportRequest): NormalizedExportData {
     contactName: optionalText(body.contactName), email: optionalText(body.email, 200), phone: optionalText(body.phone, 80),
     employees: optionalNumber(body.employees), activity: optionalText(body.activity, 1000), scope: optionalText(body.scope, 1500),
     effectiveDate: optionalText(body.effectiveDate, 20), version: optionalText(body.version, 20),
-    teamMember1: optionalText(body.teamMember1), teamMember2: optionalText(body.teamMember2),
+    preparedBy: optionalText(body.preparedBy), teamMember1: optionalText(body.teamMember1), teamMember2: optionalText(body.teamMember2),
     logoPngDataUrl: optionalText(body.logoPngDataUrl, 5_800_000),
     aiVisuals: normalizeAiVisuals(body.aiVisuals)
   };
@@ -692,7 +698,8 @@ function baseReplacements(data: NormalizedExportData): Array<[string, string]> {
     ["{{REPRESENTATIVE}}", data.representative], ["{{CONTACT_NAME}}", data.contactName],
     ["{{EMAIL}}", data.email], ["{{PHONE}}", data.phone], ["{{ACTIVITY}}", data.activity],
     ["{{SCOPE}}", data.scope], ["{{EFFECTIVE_DATE}}", data.effectiveDate ? formatDate(data.effectiveDate) : ""],
-    ["{{VERSION}}", data.version], ["{{TEAM_MEMBER_1}}", data.teamMember1], ["{{TEAM_MEMBER_2}}", data.teamMember2]
+    ["{{VERSION}}", data.version], ["{{PREPARED_BY}}", data.preparedBy],
+    ["{{TEAM_MEMBER_1}}", data.teamMember1], ["{{TEAM_MEMBER_2}}", data.teamMember2]
   ];
   optionalValues.forEach(([placeholder, value]) => { if (value) result.push([placeholder, value]); });
   if (data.employees !== undefined) result.push(["{{EMPLOYEES}}", String(data.employees)]);
