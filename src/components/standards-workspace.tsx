@@ -10,6 +10,7 @@ import { Iso50001ExportWorkspace } from "@/components/iso50001-export-workspace"
 import { Iso902027ExportWorkspace } from "@/components/iso902027-export-workspace";
 import { Iso91445ExportWorkspace } from "@/components/iso91445-export-workspace";
 import { Iso914ExportWorkspace } from "@/components/iso914-export-workspace";
+import { TemplateManager } from "@/components/template-manager";
 import { Section } from "@/components/ui";
 import { documents as localDocuments, standards } from "@/lib/mock-data";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
@@ -77,14 +78,16 @@ export function StandardsWorkspace() {
       })}
     </div>
     {loading ? <p className="mt-4 inline-flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Обновяване на реалната статистика...</p> : null}
-    {openStandard === "ISO 9001" ? <div className="mt-7 border-t border-line pt-7"><Iso9001ExportWorkspace /></div> : null}
-    {openStandard === "ISO 14001" ? <div className="mt-7 border-t border-line pt-7"><Iso14001ExportWorkspace /></div> : null}
-    {openStandard === "ISO 27001" ? <div className="mt-7 border-t border-line pt-7"><Iso27001ExportWorkspace /></div> : null}
-    {openStandard === "ISO 45001" ? <div className="mt-7 border-t border-line pt-7"><Iso45001ExportWorkspace /></div> : null}
-    {openStandard === "ISO 50001" ? <div className="mt-7 border-t border-line pt-7"><Iso50001ExportWorkspace /></div> : null}
-    {openStandard === "ISO 9-20-27" ? <div className="mt-7 border-t border-line pt-7"><Iso902027ExportWorkspace /></div> : null}
-    {openStandard === "ISO 9-14-45" ? <div className="mt-7 border-t border-line pt-7"><Iso91445ExportWorkspace /></div> : null}
-    {openStandard === "ISO 9-14" ? <div className="mt-7 border-t border-line pt-7"><Iso914ExportWorkspace /></div> : null}
+    {openStandard ? <div className="mt-7 border-t border-line pt-7"><TemplateManager standard={openStandard} />
+      {openStandard === "ISO 9001" ? <Iso9001ExportWorkspace /> : null}
+      {openStandard === "ISO 14001" ? <Iso14001ExportWorkspace /> : null}
+      {openStandard === "ISO 27001" ? <Iso27001ExportWorkspace /> : null}
+      {openStandard === "ISO 45001" ? <Iso45001ExportWorkspace /> : null}
+      {openStandard === "ISO 50001" ? <Iso50001ExportWorkspace /> : null}
+      {openStandard === "ISO 9-20-27" ? <Iso902027ExportWorkspace /> : null}
+      {openStandard === "ISO 9-14-45" ? <Iso91445ExportWorkspace /> : null}
+      {openStandard === "ISO 9-14" ? <Iso914ExportWorkspace /> : null}
+    </div> : null}
   </Section>;
 }
 

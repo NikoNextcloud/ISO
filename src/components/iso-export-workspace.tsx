@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { Archive, Download, FileArchive, FolderTree, ImagePlus, Info, Loader2, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, Archive, CheckCircle2, Download, Eye, FileArchive, FolderTree, ImagePlus, Info, Loader2, ShieldCheck, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { storageErrorMessage } from "@/lib/storage-errors";
 import type { Organization, OrganizationHistoryEntry } from "@/lib/types";
@@ -58,6 +58,14 @@ type OrganizationRow = {
   activity: string | null;
 };
 
+type ExportReport = {
+  standard: string; companyName: string; totalFiles: number; changedFiles: number; unchangedFiles: number;
+  wordFiles: number; spreadsheetFiles: number; legacyFiles: number; textReplacements: number;
+  logoReplacements: number; imageReplacements: number; renamedPaths: number; appliedFields: string[]; warnings: string[];
+};
+
+type GeneratedArchive = { url: string; filename: string; blob: Blob };
+
 const emptyForm: ExportForm = {
   companyName: "", uic: "", address: "", manager: "", representative: "", contactName: "", email: "", phone: "",
   employees: "", activity: "", scope: "", effectiveDate: "", version: ""
@@ -74,8 +82,13 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
   const [logoName, setLogoName] = useState("");
   const [aiVisuals, setAiVisuals] = useState<AiGeneratedVisual[]>([]);
   const [loading, setLoading] = useState(Boolean(supabase));
+  const [previewing, setPreviewing] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [report, setReport] = useState<ExportReport | null>(null);
+  const [generatedArchive, setGeneratedArchive] = useState<GeneratedArchive | null>(null);
   const [error, setError] = useState("");
+
+  useEffect(() => () => { if (generatedArchive?.url) URL.revokeObjectURL(generatedArchive.url); }, [generatedArchive?.url]);
 
   useEffect(() => {
     if (supabase) return;
@@ -129,34 +142,51 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
     }
   }
 
-  async function generate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError("");
+  function validateForm() {
     const missing = config.fields.filter((spec) => spec.required && String(form[spec.key] ?? "").trim() === "");
     if (missing.length) {
       setError(`Попълнете задължителните полета: ${missing.map((spec) => fieldLabel(spec.key)).join(", ")}.`);
-      return;
+      return false;
     }
+    return true;
+  }
+
+  function exportPayload() {
+    const payload = Object.fromEntries(config.fields.map((spec) => [spec.key, form[spec.key]]));
+    return { ...payload, code: config.code, logoPngDataUrl, aiVisuals: aiVisuals.map((visual) => ({ title: visual.title, type: visual.type, pngDataUrl: visual.pngDataUrl, targetHash: visual.targetHash })) };
+  }
+
+  async function requestHeaders() {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (supabase) {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+    }
+    return headers;
+  }
+
+  async function preview(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError(""); setGeneratedArchive(null);
+    if (!validateForm()) return;
+    setPreviewing(true);
+    try {
+      const response = await fetch("/api/iso/preview", { method: "POST", headers: await requestHeaders(), body: JSON.stringify(exportPayload()) });
+      const payload = await response.json().catch(() => null) as { report?: ExportReport; error?: string } | null;
+      if (!response.ok || !payload?.report) throw new Error(payload?.error ?? "Предварителната проверка не беше успешна.");
+      setReport(payload.report);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Предварителната проверка не беше успешна."); }
+    finally { setPreviewing(false); }
+  }
+
+  async function generate() {
+    setError("");
+    if (!validateForm()) return;
     setGenerating(true);
     try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (supabase) {
-        const { data } = await supabase.auth.getSession();
-        if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
-      }
-      const payload = Object.fromEntries(config.fields.map((spec) => [spec.key, form[spec.key]]));
       const response = await fetch(config.apiPath, {
         method: "POST",
-        headers,
-        body: JSON.stringify({
-          ...payload,
-          logoPngDataUrl,
-          aiVisuals: aiVisuals.map((visual) => ({
-            title: visual.title,
-            type: visual.type,
-            pngDataUrl: visual.pngDataUrl,
-            targetHash: visual.targetHash
-          }))
-        })
+        headers: await requestHeaders(),
+        body: JSON.stringify(exportPayload())
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => null) as { error?: string } | null;
@@ -167,10 +197,24 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
       const encodedName = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
       const filename = encodedName ? decodeURIComponent(encodedName) : `${config.code.replace(" ", "-")}-${form.companyName}.zip`;
       const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove();
-      URL.revokeObjectURL(url);
-      if (selectedId) await recordExportHistory(blob, filename);
+      setGeneratedArchive({ url, filename, blob });
+      setReport((current) => ({
+        standard: config.code, companyName: form.companyName,
+        totalFiles: Number(response.headers.get("x-document-count") ?? current?.totalFiles ?? 0),
+        changedFiles: Number(response.headers.get("x-changed-files") ?? current?.changedFiles ?? 0),
+        unchangedFiles: Number(response.headers.get("x-unchanged-files") ?? current?.unchangedFiles ?? 0),
+        wordFiles: current?.wordFiles ?? 0, spreadsheetFiles: current?.spreadsheetFiles ?? 0,
+        legacyFiles: Number(response.headers.get("x-legacy-files") ?? current?.legacyFiles ?? 0),
+        textReplacements: Number(response.headers.get("x-text-replacements") ?? current?.textReplacements ?? 0),
+        logoReplacements: Number(response.headers.get("x-logo-replacements") ?? current?.logoReplacements ?? 0),
+        imageReplacements: Number(response.headers.get("x-image-replacements") ?? current?.imageReplacements ?? 0),
+        renamedPaths: current?.renamedPaths ?? 0, appliedFields: current?.appliedFields ?? [],
+        warnings: decodeURIComponent(response.headers.get("x-report-warnings") ?? "").split(" | ").filter(Boolean)
+      }));
+      if (selectedId) {
+        try { await recordExportHistory(blob, filename); }
+        catch (historyError) { setError(historyError instanceof Error ? historyError.message : "ZIP файлът е готов, но не беше записан в историята."); }
+      }
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Генерирането не беше успешно."); }
     finally { setGenerating(false); }
   }
@@ -223,7 +267,7 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
 
   return <div id={`${id}-system`}><div className="mb-4"><h3 className="text-base font-semibold text-ink">{config.title}</h3><p className="mt-1 text-sm text-slate-500">{config.description}</p></div>
     {blocked ? <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Влезте в приложението, за да генерирате защитения комплект документи.</div> : <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
-      <form className="rounded-lg border border-line bg-white shadow-soft" onSubmit={generate}>
+      <form className="rounded-lg border border-line bg-white shadow-soft" onSubmit={preview}>
         <div className="border-b border-line px-5 py-4"><h3 className="text-sm font-semibold text-ink">Данни за организацията</h3><p className="mt-1 text-xs text-slate-500">Изберете съществуваща фирма или попълнете данните ръчно.</p></div>
         <div className="flex gap-3 border-b border-blue-100 bg-blue-50 px-5 py-4 text-sm">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
@@ -241,12 +285,17 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
           <AiVisualStudio companyName={form.companyName} onChange={setAiVisuals} standard={config.code} targets={config.visualTargets} value={aiVisuals} />
           {error ? <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p> : null}
         </div>
-        <div className="flex justify-end border-t border-line px-5 py-4"><button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60" disabled={generating || loading} type="submit">{generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{generating ? `Генериране на ${config.templateCount} файла...` : "Генерирай ZIP система"}</button></div>
+        <div className="flex justify-end border-t border-line px-5 py-4"><button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60" disabled={previewing || generating || loading} type="submit">{previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}{previewing ? `Проверка на ${config.templateCount} файла...` : "Преглед и проверка"}</button></div>
       </form>
 
       <aside className="h-fit rounded border border-line bg-white p-4 shadow-soft"><div className="mb-4 flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded bg-sky-50 text-action"><FileArchive className="h-4 w-4" /></span><div><h3 className="text-sm font-semibold text-ink">Комплект {config.code}</h3><p className="text-xs text-slate-500">{config.edition}</p></div></div><div className="space-y-3 text-sm text-slate-600">{config.contents.map((item, index) => <p className="flex items-center gap-2" key={item}>{index === 0 ? <FolderTree className="h-4 w-4 text-slate-400" /> : index === 1 ? <ShieldCheck className="h-4 w-4 text-slate-400" /> : <Archive className="h-4 w-4 text-slate-400" />}{item}</p>)}</div><div className="mt-4 border-t border-line pt-4"><p className="text-2xl font-semibold text-ink">{config.templateCount}</p><p className="text-xs text-slate-500">редактируеми файла в един ZIP архив</p></div><p className="mt-4 text-xs leading-5 text-slate-500">ZIP архивът се изтегля и се пази в „Генерирани системи“ за избраната фирма.{config.logoAspect ? " Каченото лого заменя фирменото лого в приложимите Word шаблони." : ""}</p></aside>
     </div>}
+    {report ? <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" role="dialog" aria-modal="true"><div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg border border-line bg-white shadow-2xl"><div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4"><div><p className="text-xs font-semibold uppercase text-action">{generatedArchive ? "Готов ZIP архив" : "Предварителен преглед"}</p><h3 className="mt-1 text-lg font-semibold text-ink">Проверка на {report.standard} за {report.companyName}</h3></div><button aria-label="Затвори" className="focus-ring grid h-9 w-9 place-items-center rounded hover:bg-panel" onClick={() => { setReport(null); setGeneratedArchive(null); }} type="button"><X className="h-5 w-5" /></button></div><div className="space-y-5 p-5"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><ReportMetric label="Общо файлове" value={report.totalFiles} /><ReportMetric label="Ще се променят" value={report.changedFiles} good /><ReportMetric label="Текстови замени" value={report.textReplacements} /><ReportMetric label="Непроменени" value={report.unchangedFiles} /></div><div className="grid gap-3 rounded border border-line bg-panel p-4 text-sm sm:grid-cols-2"><p>Word файлове: <strong>{report.wordFiles}</strong></p><p>Excel файлове: <strong>{report.spreadsheetFiles}</strong></p><p>Сменени лога: <strong>{report.logoReplacements}</strong></p><p>Сменени AI изображения: <strong>{report.imageReplacements}</strong></p><p>Преименувани заглавия: <strong>{report.renamedPaths}</strong></p><p>Стари DOC/XLS: <strong>{report.legacyFiles}</strong></p></div><div><p className="text-sm font-semibold text-ink">Данни, които ще бъдат приложени</p><div className="mt-2 flex flex-wrap gap-2">{report.appliedFields.map((field) => <span className="rounded border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-800" key={field}>{field}</span>)}</div></div>{report.warnings.length ? <div className="rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="mb-2 flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" />Предупреждения</p>{report.warnings.map((warning) => <p key={warning}>• {warning}</p>)}</div> : <p className="flex items-center gap-2 rounded border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800"><CheckCircle2 className="h-4 w-4" />Проверката не откри проблеми.</p>}</div><div className="flex flex-wrap justify-end gap-3 border-t border-line px-5 py-4"><button className="focus-ring rounded border border-line bg-white px-4 py-2.5 text-sm font-medium text-ink" onClick={() => { setReport(null); setGeneratedArchive(null); }} type="button">Затвори</button>{generatedArchive ? <a className="focus-ring inline-flex items-center gap-2 rounded bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700" download={generatedArchive.filename} href={generatedArchive.url}><Download className="h-4 w-4" />Свали проверения ZIP</a> : <button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60" disabled={generating} onClick={() => void generate()} type="button">{generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileArchive className="h-4 w-4" />}{generating ? "Генериране..." : "Генерирай проверен ZIP"}</button>}</div></div></div> : null}
   </div>;
+}
+
+function ReportMetric({ label, value, good = false }: { label: string; value: number; good?: boolean }) {
+  return <div className={`rounded border p-4 ${good ? "border-emerald-200 bg-emerald-50" : "border-line bg-white"}`}><p className="text-xs text-slate-500">{label}</p><p className={`mt-2 text-2xl font-semibold ${good ? "text-emerald-700" : "text-ink"}`}>{value}</p></div>;
 }
 
 async function prepareLogo(file: File, aspect: number) {

@@ -14,6 +14,14 @@ export type OfficeImageReplacement = {
   sourceHash: string;
 };
 
+export type OfficeReplacementStats = {
+  buffer: Buffer;
+  textReplacements: number;
+  logoReplacements: number;
+  imageReplacements: number;
+  changed: boolean;
+};
+
 const CRC_TABLE = Array.from({ length: 256 }, (_, value) => {
   let crc = value;
   for (let bit = 0; bit < 8; bit += 1) crc = (crc & 1) ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
@@ -187,7 +195,7 @@ function headerImageTargets(entries: ZipEntry[]) {
   return targets;
 }
 
-export function replaceWordText(docx: Buffer, replacements: Array<[string, string]>, logo?: WordLogoReplacement, imageReplacements: OfficeImageReplacement[] = []) {
+export function replaceWordTextWithStats(docx: Buffer, replacements: Array<[string, string]>, logo?: WordLogoReplacement, imageReplacements: OfficeImageReplacement[] = []): OfficeReplacementStats {
   const sourceEntries = readZip(docx);
   const logoTargets = logo?.mode === "header-images" ? headerImageTargets(sourceEntries) : new Set<string>();
   const sourceHashes = new Set(logo?.sourceHashes ?? []);
@@ -205,9 +213,12 @@ export function replaceWordText(docx: Buffer, replacements: Array<[string, strin
   });
   const pngTargets = new Set([...logoTargets, ...customImageTargets.keys()]);
   const orderedReplacements = [...replacements].sort((a, b) => b[0].length - a[0].length);
+  let textReplacements = 0;
+  let logoReplacements = 0;
+  let customImageReplacements = 0;
   const entries = sourceEntries.map((entry) => {
-    if (customImageTargets.has(entry.name)) return { ...entry, data: customImageTargets.get(entry.name)! };
-    if (logo && logoTargets.has(entry.name)) return { ...entry, data: logo.data };
+    if (customImageTargets.has(entry.name)) { customImageReplacements += 1; return { ...entry, data: customImageTargets.get(entry.name)! }; }
+    if (logo && logoTargets.has(entry.name)) { logoReplacements += 1; return { ...entry, data: logo.data }; }
     if (entry.name === "[Content_Types].xml" && pngTargets.size) {
       return { ...entry, data: Buffer.from(addPngContentTypeOverrides(entry.data.toString("utf8"), pngTargets), "utf8") };
     }
@@ -218,21 +229,34 @@ export function replaceWordText(docx: Buffer, replacements: Array<[string, strin
     for (const [source, replacement] of orderedReplacements) {
       if (!source || source === replacement) continue;
       if (isDocumentPropertyXml) {
-        xml = replaceDocumentTitleProperty(xml, source, replacement);
+        const result = replaceDocumentTitlePropertyWithCount(xml, source, replacement);
+        xml = result.xml;
+        textReplacements += result.count;
         continue;
       }
       for (;;) {
         const result = replaceOnceAcrossTextNodes(xml, source, replacement);
         xml = result.xml;
         if (!result.changed) break;
+        textReplacements += 1;
       }
     }
     return { ...entry, data: Buffer.from(xml, "utf8") };
   });
-  return writeZip(entries);
+  return {
+    buffer: writeZip(entries),
+    textReplacements,
+    logoReplacements,
+    imageReplacements: customImageReplacements,
+    changed: textReplacements + logoReplacements + customImageReplacements > 0
+  };
 }
 
-export function replaceSpreadsheetText(xlsx: Buffer, replacements: Array<[string, string]>, logo?: WordLogoReplacement, imageReplacements: OfficeImageReplacement[] = []) {
+export function replaceWordText(docx: Buffer, replacements: Array<[string, string]>, logo?: WordLogoReplacement, imageReplacements: OfficeImageReplacement[] = []) {
+  return replaceWordTextWithStats(docx, replacements, logo, imageReplacements).buffer;
+}
+
+export function replaceSpreadsheetTextWithStats(xlsx: Buffer, replacements: Array<[string, string]>, logo?: WordLogoReplacement, imageReplacements: OfficeImageReplacement[] = []): OfficeReplacementStats {
   const sourceEntries = readZip(xlsx);
   const logoTargets = new Set<string>();
   const sourceHashes = new Set(logo?.sourceHashes ?? []);
@@ -250,9 +274,12 @@ export function replaceSpreadsheetText(xlsx: Buffer, replacements: Array<[string
   });
   const pngTargets = new Set([...logoTargets, ...customImageTargets.keys()]);
   const orderedReplacements = [...replacements].sort((a, b) => b[0].length - a[0].length);
+  let textReplacements = 0;
+  let logoReplacements = 0;
+  let customImageReplacements = 0;
   const entries = sourceEntries.map((entry) => {
-    if (customImageTargets.has(entry.name)) return { ...entry, data: customImageTargets.get(entry.name)! };
-    if (logo && logoTargets.has(entry.name)) return { ...entry, data: logo.data };
+    if (customImageTargets.has(entry.name)) { customImageReplacements += 1; return { ...entry, data: customImageTargets.get(entry.name)! }; }
+    if (logo && logoTargets.has(entry.name)) { logoReplacements += 1; return { ...entry, data: logo.data }; }
     if (entry.name === "[Content_Types].xml" && pngTargets.size) {
       return { ...entry, data: Buffer.from(addPngContentTypeOverrides(entry.data.toString("utf8"), pngTargets), "utf8") };
     }
@@ -264,19 +291,34 @@ export function replaceSpreadsheetText(xlsx: Buffer, replacements: Array<[string
     for (const [source, replacement] of orderedReplacements) {
       if (!source || source === replacement) continue;
       if (isDocumentPropertyXml) {
-        xml = replaceDocumentTitleProperty(xml, source, replacement);
+        const result = replaceDocumentTitlePropertyWithCount(xml, source, replacement);
+        xml = result.xml;
+        textReplacements += result.count;
         continue;
       }
       for (;;) {
         const result = replaceOnceAcrossSpreadsheetTextNodes(xml, source, replacement);
         xml = result.xml;
         if (!result.changed) break;
+        textReplacements += 1;
       }
-      xml = replaceSpreadsheetAttributeValues(xml, source, replacement);
+      const attributeResult = replaceSpreadsheetAttributeValuesWithCount(xml, source, replacement);
+      xml = attributeResult.xml;
+      textReplacements += attributeResult.count;
     }
     return { ...entry, data: Buffer.from(xml, "utf8") };
   });
-  return writeZip(entries);
+  return {
+    buffer: writeZip(entries),
+    textReplacements,
+    logoReplacements,
+    imageReplacements: customImageReplacements,
+    changed: textReplacements + logoReplacements + customImageReplacements > 0
+  };
+}
+
+export function replaceSpreadsheetText(xlsx: Buffer, replacements: Array<[string, string]>, logo?: WordLogoReplacement, imageReplacements: OfficeImageReplacement[] = []) {
+  return replaceSpreadsheetTextWithStats(xlsx, replacements, logo, imageReplacements).buffer;
 }
 
 function replaceOnceAcrossSpreadsheetTextNodes(xml: string, source: string, replacement: string) {
@@ -315,21 +357,35 @@ function replaceOnceAcrossSpreadsheetTextNodes(xml: string, source: string, repl
   return { xml: output + xml.slice(cursor), changed: true };
 }
 
-function replaceSpreadsheetAttributeValues(xml: string, source: string, replacement: string) {
-  return xml.replace(/(\s[\w:.-]+=")([^"]*)(")/g, (match, prefix: string, value: string, suffix: string) => {
+function replaceSpreadsheetAttributeValuesWithCount(xml: string, source: string, replacement: string) {
+  let count = 0;
+  const result = xml.replace(/(\s[\w:.-]+=")([^"]*)(")/g, (match, prefix: string, value: string, suffix: string) => {
     const decoded = decodeXml(value);
     if (!decoded.includes(source)) return match;
+    count += countOccurrences(decoded, source);
     return `${prefix}${encodeXml(decoded.replaceAll(source, replacement))}${suffix}`;
   });
+  return { xml: result, count };
 }
 
-function replaceDocumentTitleProperty(xml: string, source: string, replacement: string) {
+function replaceDocumentTitlePropertyWithCount(xml: string, source: string, replacement: string) {
   const pattern = /<((?:dc:(?:title|subject)|cp:(?:keywords|category|contentStatus)))(\b[^>]*)>([\s\S]*?)<\/\1>/gi;
-  return xml.replace(pattern, (match, tag: string, attributes: string, value: string) => {
+  let count = 0;
+  const result = xml.replace(pattern, (match, tag: string, attributes: string, value: string) => {
     const decoded = decodeXml(value);
     if (!decoded.includes(source)) return match;
+    count += countOccurrences(decoded, source);
     return `<${tag}${attributes}>${encodeXml(decoded.replaceAll(source, replacement))}</${tag}>`;
   });
+  return { xml: result, count };
+}
+
+function countOccurrences(value: string, search: string) {
+  if (!search) return 0;
+  let count = 0;
+  let index = value.indexOf(search);
+  while (index >= 0) { count += 1; index = value.indexOf(search, index + search.length); }
+  return count;
 }
 
 function addPngContentTypeOverrides(xml: string, targets: Set<string>) {

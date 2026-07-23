@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
-import { replaceSpreadsheetText, replaceWordText, writeZip, type OfficeImageReplacement, type WordLogoReplacement, type ZipEntry } from "@/lib/zip";
+import { readZip, replaceSpreadsheetTextWithStats, replaceWordTextWithStats, writeZip, type OfficeImageReplacement, type WordLogoReplacement, type ZipEntry } from "@/lib/zip";
 
 export type IsoExportRequest = {
   companyName: string;
@@ -58,6 +58,33 @@ export type IsoExportConfig = {
   logoSourceHashes?: string[];
   pathCompanyNames?: string[];
   replacements: (data: NormalizedExportData) => Array<[string, string]>;
+};
+
+export type IsoExportReport = {
+  standard: string;
+  companyName: string;
+  generatedAt: string;
+  totalFiles: number;
+  changedFiles: number;
+  unchangedFiles: number;
+  wordFiles: number;
+  spreadsheetFiles: number;
+  legacyFiles: number;
+  textReplacements: number;
+  logoReplacements: number;
+  imageReplacements: number;
+  renamedPaths: number;
+  appliedFields: string[];
+  warnings: string[];
+  files: Array<{
+    name: string;
+    format: string;
+    changed: boolean;
+    textReplacements: number;
+    logoReplacements: number;
+    imageReplacements: number;
+    pathRenamed: boolean;
+  }>;
 };
 
 export const iso9001ExportConfig: IsoExportConfig = {
@@ -375,6 +402,13 @@ export const iso914ExportConfig: IsoExportConfig = {
   }
 };
 
+export function getIsoExportConfig(code: string) {
+  return [
+    iso9001ExportConfig, iso14001ExportConfig, iso27001ExportConfig, iso45001ExportConfig,
+    iso50001ExportConfig, iso902027ExportConfig, iso91445ExportConfig, iso914ExportConfig
+  ].find((config) => config.code === code);
+}
+
 export async function authorizeIsoExport(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -386,10 +420,26 @@ export async function authorizeIsoExport(request: NextRequest) {
   return !error && Boolean(data.user);
 }
 
-export async function createIsoSystemArchive(body: IsoExportRequest, config: IsoExportConfig) {
+export async function loadActiveTemplatePackage(request: NextRequest, standard: string) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!url || !key || !token) return undefined;
+  const client = createClient(url, key, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+  const result = await client.from("template_versions").select("storage_path").eq("standard", standard).eq("is_active", true).maybeSingle();
+  if (result.error || !result.data?.storage_path) return undefined;
+  const download = await client.storage.from("iso-templates").download(result.data.storage_path);
+  if (download.error) throw new Error(`Активната версия на шаблона не може да бъде заредена: ${download.error.message}`);
+  return Buffer.from(await download.data.arrayBuffer());
+}
+
+export async function createIsoSystemArchive(body: IsoExportRequest, config: IsoExportConfig, templatePackage?: Buffer) {
   const data = normalizeRequest(body);
   const templateRoot = path.join(process.cwd(), "templates", config.templateDirectory);
-  const files = await walk(templateRoot);
+  const files = templatePackage ? templateFilesFromZip(templatePackage) : await walk(templateRoot);
   if (!files.length) throw new Error(`Няма налични шаблони за ${config.code}.`);
 
   const logoData = decodeLogo(data.logoPngDataUrl);
@@ -401,15 +451,42 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
   const replacements = [...baseReplacements(data), ...pathTitleReplacements, ...config.replacements(data)];
   const folder = `${config.code} - ${safeName(data.companyName)}`;
   const entries: ZipEntry[] = [];
+  const fileResults: IsoExportReport["files"] = [];
 
   for (const file of files) {
-    let content = await fs.readFile(file.absolute);
+    let content = file.data ?? await fs.readFile(file.absolute!);
     const lowerName = file.relative.toLocaleLowerCase("bg");
-    if (lowerName.endsWith(".docx")) content = replaceWordText(content, replacements, logo, imageReplacements);
-    else if (lowerName.endsWith(".xlsx")) content = replaceSpreadsheetText(content, replacements, logo, imageReplacements);
     const outputPath = replaceCompanyInPath(file.relative, config.pathCompanyNames, data.companyName);
+    let textReplacements = 0;
+    let logoReplacements = 0;
+    let replacedImages = 0;
+    if (lowerName.endsWith(".docx")) {
+      const result = replaceWordTextWithStats(content, replacements, logo, imageReplacements);
+      content = result.buffer;
+      textReplacements = result.textReplacements;
+      logoReplacements = result.logoReplacements;
+      replacedImages = result.imageReplacements;
+    } else if (lowerName.endsWith(".xlsx")) {
+      const result = replaceSpreadsheetTextWithStats(content, replacements, logo, imageReplacements);
+      content = result.buffer;
+      textReplacements = result.textReplacements;
+      logoReplacements = result.logoReplacements;
+      replacedImages = result.imageReplacements;
+    }
+    const pathRenamed = outputPath !== file.relative;
+    fileResults.push({
+      name: outputPath,
+      format: path.extname(file.relative).slice(1).toUpperCase() || "FILE",
+      changed: pathRenamed || textReplacements + logoReplacements + replacedImages > 0,
+      textReplacements,
+      logoReplacements,
+      imageReplacements: replacedImages,
+      pathRenamed
+    });
     entries.push({ name: path.posix.join(folder, outputPath), data: content });
   }
+
+  const report = createExportReport(config, data, fileResults);
 
   data.aiVisuals.forEach((visual, index) => {
     const name = `${String(index + 1).padStart(2, "0")} - ${safeName(visual.title || visual.type || "AI визуализация")}.png`;
@@ -424,14 +501,83 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
     ...summaryWhen(data.version, "Версия"),
     `Дата на генериране: ${formatDate(new Date().toISOString().slice(0, 10))}`, `Документи: ${files.length}`,
     `Фирмено лого: ${logoData ? "заменено в приложимите шаблони" : "оригиналните изображения са запазени"}`,
-    `AI визуализации: ${data.aiVisuals.length}`
+    `AI визуализации: ${data.aiVisuals.length}`,
+    "",
+    "РЕЗУЛТАТ ОТ ПРОВЕРКАТА",
+    `Променени файлове: ${report.changedFiles} от ${report.totalFiles}`,
+    `Текстови замени: ${report.textReplacements}`,
+    `Сменени фирмени лога: ${report.logoReplacements}`,
+    `Сменени служебни изображения: ${report.imageReplacements}`,
+    `Преименувани файлове/папки: ${report.renamedPaths}`,
+    `Предупреждения: ${report.warnings.length ? report.warnings.join("; ") : "няма"}`
   ].join("\r\n");
   entries.unshift({ name: path.posix.join(folder, "README - ДАННИ ЗА ЕКСПОРТА.txt"), data: Buffer.from(summary, "utf8") });
+  entries.unshift({ name: path.posix.join(folder, "ПРОВЕРКА НА ГЕНЕРИРАНЕТО.json"), data: Buffer.from(JSON.stringify(report, null, 2), "utf8") });
 
   return {
     archive: writeZip(entries),
     filename: `${config.code.replace("ISO ", "ISO-")}-${safeName(data.companyName)}.zip`,
-    documentCount: files.length
+    documentCount: files.length,
+    report
+  };
+}
+
+function templateFilesFromZip(archive: Buffer) {
+  const entries = readZip(archive).filter((entry) => !entry.directory && !entry.name.startsWith("__MACOSX/") && !entry.name.endsWith(".DS_Store"));
+  if (!entries.length) throw new Error("Качената версия на шаблона е празна.");
+  if (entries.length > 1000) throw new Error("Качената версия съдържа твърде много файлове.");
+  const expandedSize = entries.reduce((sum, entry) => sum + entry.data.length, 0);
+  if (expandedSize > 300 * 1024 * 1024) throw new Error("Качената версия е твърде голяма след разархивиране.");
+  const firstParts = entries.map((entry) => entry.name.replaceAll("\\", "/").split("/"));
+  const commonRoot = firstParts.every((parts) => parts.length > 1 && parts[0] === firstParts[0][0]) ? firstParts[0][0] : "";
+  return entries.map((entry) => ({
+    relative: commonRoot ? entry.name.replaceAll("\\", "/").slice(commonRoot.length + 1) : entry.name.replaceAll("\\", "/"),
+    data: entry.data,
+    absolute: undefined as string | undefined
+  })).filter((entry) => entry.relative);
+}
+
+export function isoExportReportHeaders(report: IsoExportReport) {
+  return {
+    "X-Changed-Files": String(report.changedFiles),
+    "X-Unchanged-Files": String(report.unchangedFiles),
+    "X-Text-Replacements": String(report.textReplacements),
+    "X-Logo-Replacements": String(report.logoReplacements),
+    "X-Image-Replacements": String(report.imageReplacements),
+    "X-Legacy-Files": String(report.legacyFiles),
+    "X-Report-Warnings": encodeURIComponent(report.warnings.join(" | "))
+  };
+}
+
+function createExportReport(config: IsoExportConfig, data: NormalizedExportData, files: IsoExportReport["files"]): IsoExportReport {
+  const legacyFiles = files.filter((file) => file.format === "XLS" || file.format === "DOC").length;
+  const warnings: string[] = [];
+  if (legacyFiles) warnings.push(`${legacyFiles} стари XLS/DOC файла не поддържат автоматична проверка на съдържанието`);
+  if (data.logoPngDataUrl && !files.some((file) => file.logoReplacements > 0)) warnings.push("Не е намерено подходящо фирмено лого за замяна");
+  if (data.aiVisuals.some((visual) => visual.targetHash) && !files.some((file) => file.imageReplacements > 0)) warnings.push("Не е намерено съвпадащо служебно изображение за замяна");
+  const appliedFields = [
+    ["Име на фирмата", data.companyName], ["ЕИК", data.uic], ["Адрес", data.address], ["Управител", data.manager],
+    ["Представител", data.representative], ["Лице за контакт", data.contactName], ["Имейл", data.email], ["Телефон", data.phone],
+    ["Брой служители", data.employees === undefined ? "" : String(data.employees)], ["Дейност", data.activity], ["Обхват", data.scope],
+    ["Дата", data.effectiveDate], ["Версия", data.version]
+  ].filter((entry) => entry[1]).map((entry) => entry[0]);
+  return {
+    standard: config.code,
+    companyName: data.companyName,
+    generatedAt: new Date().toISOString(),
+    totalFiles: files.length,
+    changedFiles: files.filter((file) => file.changed).length,
+    unchangedFiles: files.filter((file) => !file.changed).length,
+    wordFiles: files.filter((file) => file.format === "DOCX").length,
+    spreadsheetFiles: files.filter((file) => file.format === "XLSX").length,
+    legacyFiles,
+    textReplacements: files.reduce((sum, file) => sum + file.textReplacements, 0),
+    logoReplacements: files.reduce((sum, file) => sum + file.logoReplacements, 0),
+    imageReplacements: files.reduce((sum, file) => sum + file.imageReplacements, 0),
+    renamedPaths: files.filter((file) => file.pathRenamed).length,
+    appliedFields,
+    warnings,
+    files
   };
 }
 
@@ -496,9 +642,9 @@ function decodePngDataUrl(value: string, label: string) {
   return data;
 }
 
-async function walk(directory: string, relative = ""): Promise<Array<{ absolute: string; relative: string }>> {
+async function walk(directory: string, relative = ""): Promise<Array<{ absolute?: string; relative: string; data?: Buffer }>> {
   const items = await fs.readdir(directory, { withFileTypes: true });
-  const result: Array<{ absolute: string; relative: string }> = [];
+  const result: Array<{ absolute?: string; relative: string; data?: Buffer }> = [];
   for (const item of items) {
     const absolute = path.join(directory, item.name);
     const childRelative = path.posix.join(relative, item.name);
