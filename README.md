@@ -41,6 +41,9 @@
 - Cloudflare AI стартира генерирането, а приложението изчертава крайния тип схема с ясни кутии, стрелки, оси и реални български надписи. Така в PNG файла няма измислен английски текст от модела.
 - Заглавието, описанието, фирмата и стандартът се изписват с български кирилски шрифт, а крайният PNG се записва във висока резолюция.
 - Статусният бутон в AI панела проверява реалната Cloudflare връзка: зелено означава работеща конфигурация, а червено показва точната причина за проблема.
+- AI смисловият и езиков преглед анализира текста на всички генерирани DOCX/XLSX файлове след точните фирмени замени. Предложенията са свързани с конкретен файл и показват оригинал, редактируем предложен текст, причина и увереност.
+- Нито една AI текстова промяна не се прилага автоматично. Потребителят може да редактира предложението, да го приеме или откаже, а в окончателния ZIP влизат само приетите корекции.
+- Текстовият преглед използва `@cf/qwen/qwen3-30b-a3b-fp8` по подразбиране, кешира еднаквите прегледи и използва същото ограничение на честотата като останалите платени AI операции.
 
 Генерираният архив съдържа:
 
@@ -64,7 +67,7 @@ npm run dev
 
 ### 1. Създаване на таблиците
 
-За нов Supabase проект изпълнете последователно всички SQL файлове от `supabase/migrations/001_initial_schema.sql` до `supabase/migrations/011_seed_iso_9001_14001_45001.sql` в Supabase Dashboard -> SQL Editor.
+За нов Supabase проект изпълнете последователно всички SQL файлове от `supabase/migrations/001_initial_schema.sql` до `supabase/migrations/013_organization_certification_context.sql` в Supabase Dashboard -> SQL Editor.
 
 Ако първата миграция вече е изпълнена, изпълнете последователно:
 
@@ -78,6 +81,9 @@ npm run dev
 8. `supabase/migrations/009_ai_cache_and_rate_limit.sql`
 9. `supabase/migrations/010_add_iso_9001_14001_45001.sql`
 10. `supabase/migrations/011_seed_iso_9001_14001_45001.sql`
+11. `supabase/migrations/011_remove_iso_9_14_45.sql`
+12. `supabase/migrations/012_extended_organization_profile.sql`
+13. `supabase/migrations/013_organization_certification_context.sql`
 
 ### 2. Единствен потребител
 
@@ -93,6 +99,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
 CLOUDFLARE_ACCOUNT_ID=YOUR_ACCOUNT_ID
 CLOUDFLARE_API_TOKEN=YOUR_WORKERS_AI_TOKEN
 CLOUDFLARE_AI_IMAGE_MODEL=@cf/black-forest-labs/flux-1-schnell
+CLOUDFLARE_AI_TEXT_MODEL=@cf/qwen/qwen3-30b-a3b-fp8
 ```
 
 Стойностите са в Supabase Dashboard -> Project Settings -> API. Не поставяйте `service_role` ключ във frontend настройките.
@@ -106,6 +113,7 @@ CLOUDFLARE_AI_IMAGE_MODEL=@cf/black-forest-labs/flux-1-schnell
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_AI_IMAGE_MODEL` (по избор)
+- `CLOUDFLARE_AI_TEXT_MODEL` (по избор; по подразбиране `@cf/qwen/qwen3-30b-a3b-fp8`)
 
 Направете нов deployment. Шаблоните за ISO 9001, ISO 14001, ISO 27001, ISO 45001, ISO 50001, ISO 9-20-27, ISO 9001-14001-45001 и ISO 9-14 се включват автоматично във Vercel build-а.
 

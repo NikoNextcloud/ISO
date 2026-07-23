@@ -228,17 +228,26 @@ export function replaceWordTextWithStats(docx: Buffer, replacements: Array<[stri
     let xml = entry.data.toString("utf8");
     for (const [source, replacement] of orderedReplacements) {
       if (!source || source === replacement) continue;
+      const safeReplacement = replacement.includes(source) ? uniqueReplacementToken(xml, source, replacement) : replacement;
       if (isDocumentPropertyXml) {
-        const result = replaceDocumentTitlePropertyWithCount(xml, source, replacement);
+        const result = replaceDocumentTitlePropertyWithCount(xml, source, safeReplacement);
         xml = result.xml;
         textReplacements += result.count;
+        if (safeReplacement !== replacement) xml = replaceDocumentTitlePropertyWithCount(xml, safeReplacement, replacement).xml;
         continue;
       }
       for (;;) {
-        const result = replaceOnceAcrossTextNodes(xml, source, replacement);
+        const result = replaceOnceAcrossTextNodes(xml, source, safeReplacement);
         xml = result.xml;
         if (!result.changed) break;
         textReplacements += 1;
+      }
+      if (safeReplacement !== replacement) {
+        for (;;) {
+          const result = replaceOnceAcrossTextNodes(xml, safeReplacement, replacement);
+          xml = result.xml;
+          if (!result.changed) break;
+        }
       }
     }
     return { ...entry, data: Buffer.from(xml, "utf8") };
@@ -290,21 +299,31 @@ export function replaceSpreadsheetTextWithStats(xlsx: Buffer, replacements: Arra
     let xml = entry.data.toString("utf8");
     for (const [source, replacement] of orderedReplacements) {
       if (!source || source === replacement) continue;
+      const safeReplacement = replacement.includes(source) ? uniqueReplacementToken(xml, source, replacement) : replacement;
       if (isDocumentPropertyXml) {
-        const result = replaceDocumentTitlePropertyWithCount(xml, source, replacement);
+        const result = replaceDocumentTitlePropertyWithCount(xml, source, safeReplacement);
         xml = result.xml;
         textReplacements += result.count;
+        if (safeReplacement !== replacement) xml = replaceDocumentTitlePropertyWithCount(xml, safeReplacement, replacement).xml;
         continue;
       }
       for (;;) {
-        const result = replaceOnceAcrossSpreadsheetTextNodes(xml, source, replacement);
+        const result = replaceOnceAcrossSpreadsheetTextNodes(xml, source, safeReplacement);
         xml = result.xml;
         if (!result.changed) break;
         textReplacements += 1;
       }
-      const attributeResult = replaceSpreadsheetVisibleAttributesWithCount(xml, entry.name, source, replacement);
+      const attributeResult = replaceSpreadsheetVisibleAttributesWithCount(xml, entry.name, source, safeReplacement);
       xml = attributeResult.xml;
       textReplacements += attributeResult.count;
+      if (safeReplacement !== replacement) {
+        for (;;) {
+          const result = replaceOnceAcrossSpreadsheetTextNodes(xml, safeReplacement, replacement);
+          xml = result.xml;
+          if (!result.changed) break;
+        }
+        xml = replaceSpreadsheetVisibleAttributesWithCount(xml, entry.name, safeReplacement, replacement).xml;
+      }
     }
     return { ...entry, data: Buffer.from(xml, "utf8") };
   });
@@ -389,6 +408,13 @@ function countOccurrences(value: string, search: string) {
   let index = value.indexOf(search);
   while (index >= 0) { count += 1; index = value.indexOf(search, index + search.length); }
   return count;
+}
+
+function uniqueReplacementToken(xml: string, source: string, replacement: string) {
+  const base = `__ISO_EDIT_${createHash("sha256").update(`${source}\0${replacement}`).digest("hex").slice(0, 20)}__`;
+  let token = base;
+  while (xml.includes(token)) token += "_";
+  return token;
 }
 
 function addPngContentTypeOverrides(xml: string, targets: Set<string>) {

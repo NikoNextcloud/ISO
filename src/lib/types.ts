@@ -1,19 +1,39 @@
 export type IsoStandardCode = "ISO 9001" | "ISO 14001" | "ISO 45001" | "ISO 27001" | "ISO 50001" | "ISO 9-20-27" | "ISO 9-14" | "ISO 9001-14001-45001";
 
 export type OrganizationStatus = "draft" | "implementation" | "ready" | "certified" | "attention";
+export type DesignDevelopmentApplicability = "" | "applicable" | "not_applicable";
 
 export type Organization = {
   id: string;
   name: string;
   uic: string;
+  legalForm?: string;
   address: string;
+  city?: string;
   manager: string;
+  foundedAt?: string;
   representative?: string;
   contactName?: string;
   contactPhone?: string;
   contactEmail: string;
   employees: number;
   activity: string;
+  physicalScope?: string;
+  systemDate?: string;
+  organizationContext?: string;
+  processesDescription?: string;
+  productsServices?: string;
+  environmentalAspects?: string;
+  occupationalRisks?: string;
+  externalParties?: string;
+  wasteManagement?: string;
+  designDevelopment?: DesignDevelopmentApplicability;
+  postDeliveryActivities?: string;
+  trainingDetails?: string;
+  internalAuditDate?: string;
+  managementReviewDate?: string;
+  previousYear?: number;
+  currentYear?: number;
   sites: number;
   standards: IsoStandardCode[];
   status: OrganizationStatus;

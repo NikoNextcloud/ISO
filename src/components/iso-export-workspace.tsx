@@ -2,24 +2,33 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { AlertTriangle, Archive, CheckCircle2, Download, Eye, FileArchive, FolderTree, ImagePlus, Info, Loader2, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, Archive, CheckCircle2, Download, Eye, FileArchive, FolderTree, ImagePlus, Info, Loader2, ShieldCheck, Sparkles, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { storageErrorMessage } from "@/lib/storage-errors";
 import type { Organization, OrganizationHistoryEntry } from "@/lib/types";
 import { AiVisualStudio, type AiGeneratedVisual, type AiVisualTarget } from "@/components/ai-visual-studio";
+import { AiDocumentReviewDialog, type EditableAiReviewSuggestion } from "@/components/ai-document-review-panel";
+import type { AiDocumentReview } from "@/lib/ai-document-review";
 
 export type ExportFieldKey =
-  | "companyName" | "uic" | "address" | "manager" | "representative"
+  | "companyName" | "uic" | "legalForm" | "address" | "city" | "manager" | "foundedAt" | "representative"
   | "contactName" | "email" | "phone" | "employees" | "activity"
-  | "scope" | "effectiveDate" | "version" | "preparedBy" | "teamMember1" | "teamMember2";
+  | "scope" | "physicalScope" | "systemDate" | "organizationContext" | "processesDescription"
+  | "productsServices" | "environmentalAspects" | "occupationalRisks" | "externalParties"
+  | "wasteManagement" | "designDevelopment" | "postDeliveryActivities"
+  | "trainingDetails" | "internalAuditDate" | "managementReviewDate" | "previousYear" | "currentYear"
+  | "effectiveDate" | "version" | "preparedBy" | "teamMember1" | "teamMember2";
 
 export type ExportFieldSpec = { key: ExportFieldKey; required?: boolean; hint?: string };
 
 const FIELD_META: Record<ExportFieldKey, { label: string; type: "text" | "email" | "number" | "date" | "textarea"; fullWidth?: boolean }> = {
   companyName: { label: "Име на фирмата", type: "text", fullWidth: true },
   uic: { label: "ЕИК", type: "text" },
-  address: { label: "Адрес", type: "text" },
+  legalForm: { label: "Правна форма", type: "text" },
+  address: { label: "Седалище/адрес", type: "text" },
+  city: { label: "Град", type: "text" },
   manager: { label: "Управител", type: "text" },
+  foundedAt: { label: "Дата на създаване на фирмата", type: "date" },
   representative: { label: "Представител на ръководството", type: "text" },
   preparedBy: { label: "Изготвил/Отговорник", type: "text" },
   teamMember1: { label: "Член на енергийния екип 1", type: "text" },
@@ -30,8 +39,24 @@ const FIELD_META: Record<ExportFieldKey, { label: string; type: "text" | "email"
   employees: { label: "Брой служители", type: "number" },
   effectiveDate: { label: "Дата на влизане в сила", type: "date" },
   version: { label: "Версия", type: "text" },
-  activity: { label: "Основна дейност", type: "textarea", fullWidth: true },
-  scope: { label: "Обхват", type: "textarea", fullWidth: true }
+  activity: { label: "Обхват на дейност", type: "textarea", fullWidth: true },
+  scope: { label: "Обхват", type: "textarea", fullWidth: true },
+  physicalScope: { label: "Физически обхват", type: "textarea", fullWidth: true },
+  systemDate: { label: "Дата на системата", type: "date" },
+  organizationContext: { label: "Контекст на организацията", type: "textarea", fullWidth: true },
+  processesDescription: { label: "Процеси", type: "textarea", fullWidth: true },
+  productsServices: { label: "Продукти и услуги", type: "textarea", fullWidth: true },
+  environmentalAspects: { label: "Екологични аспекти", type: "textarea", fullWidth: true },
+  occupationalRisks: { label: "Рискове по ЗБУТ", type: "textarea", fullWidth: true },
+  externalParties: { label: "Външни заинтересовани страни", type: "textarea", fullWidth: true },
+  wasteManagement: { label: "Управление на отпадъците", type: "textarea", fullWidth: true },
+  designDevelopment: { label: "Проектиране и разработване", type: "text" },
+  postDeliveryActivities: { label: "Дейности след доставка", type: "textarea", fullWidth: true },
+  trainingDetails: { label: "Обучения", type: "textarea", fullWidth: true },
+  internalAuditDate: { label: "Вътрешен одит", type: "date" },
+  managementReviewDate: { label: "Преглед от ръководството", type: "date" },
+  previousYear: { label: "Предходна година", type: "number" },
+  currentYear: { label: "Настояща година", type: "number" }
 };
 
 export type IsoExportWorkspaceConfig = {
@@ -50,28 +75,45 @@ export type IsoExportWorkspaceConfig = {
 };
 
 type ExportForm = {
-  companyName: string; uic: string; address: string; manager: string; representative: string;
+  companyName: string; uic: string; legalForm: string; address: string; city: string; manager: string; foundedAt: string; representative: string;
   contactName: string; email: string; phone: string; employees: number | ""; activity: string;
-  scope: string; effectiveDate: string; version: string; preparedBy: string; teamMember1: string; teamMember2: string;
+  scope: string; physicalScope: string; systemDate: string; organizationContext: string; processesDescription: string;
+  productsServices: string; environmentalAspects: string; occupationalRisks: string; externalParties: string;
+  wasteManagement: string; designDevelopment: string; postDeliveryActivities: string;
+  trainingDetails: string; internalAuditDate: string; managementReviewDate: string; previousYear: number | "";
+  currentYear: number | ""; effectiveDate: string; version: string; preparedBy: string; teamMember1: string; teamMember2: string;
 };
 
 type OrganizationRow = {
-  id: string; name: string; uic: string; address: string | null; manager: string | null; representative: string | null;
+  id: string; name: string; uic: string; legal_form: string | null; address: string | null; city: string | null;
+  manager: string | null; founded_at: string | null; representative: string | null;
   contact_name: string | null; contact_phone: string | null; contact_email: string | null; employees_count: number;
-  activity: string | null;
+  activity: string | null; physical_scope: string | null; system_date: string | null; organization_context: string | null;
+  processes_description: string | null; products_services: string | null; environmental_aspects: string | null;
+  occupational_risks: string | null; external_parties: string | null; waste_management: string | null;
+  design_development: string | null; post_delivery_activities: string | null;
+  training_details: string | null; internal_audit_date: string | null;
+  management_review_date: string | null; previous_year: number | null; current_year: number | null;
 };
 
 type ExportReport = {
   standard: string; companyName: string; totalFiles: number; changedFiles: number; unchangedFiles: number;
   wordFiles: number; spreadsheetFiles: number; legacyFiles: number; textReplacements: number;
+  aiTextReplacements: number;
   logoReplacements: number; imageReplacements: number; renamedPaths: number; appliedFields: string[]; warnings: string[];
+  files?: Array<{ name: string; contentWarnings: string[] }>;
 };
 
 type GeneratedArchive = { url: string; filename: string; blob: Blob };
 
 const emptyForm: ExportForm = {
-  companyName: "", uic: "", address: "", manager: "", representative: "", contactName: "", email: "", phone: "",
-  employees: "", activity: "", scope: "", effectiveDate: "", version: "", preparedBy: "", teamMember1: "", teamMember2: ""
+  companyName: "", uic: "", legalForm: "", address: "", city: "", manager: "", foundedAt: "", representative: "",
+  contactName: "", email: "", phone: "", employees: "", activity: "", scope: "", physicalScope: "", systemDate: "",
+  organizationContext: "", processesDescription: "", trainingDetails: "", internalAuditDate: "",
+  productsServices: "", environmentalAspects: "", occupationalRisks: "", externalParties: "",
+  wasteManagement: "", designDevelopment: "", postDeliveryActivities: "",
+  managementReviewDate: "", previousYear: "", currentYear: "", effectiveDate: "", version: "", preparedBy: "",
+  teamMember1: "", teamMember2: ""
 };
 
 export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfig }) {
@@ -89,6 +131,12 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
   const [generating, setGenerating] = useState(false);
   const [report, setReport] = useState<ExportReport | null>(null);
   const [generatedArchive, setGeneratedArchive] = useState<GeneratedArchive | null>(null);
+  const [aiReview, setAiReview] = useState<AiDocumentReview | null>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<EditableAiReviewSuggestion[]>([]);
+  const [aiReviewing, setAiReviewing] = useState(false);
+  const [aiReviewOpen, setAiReviewOpen] = useState(false);
+  const [aiReviewCached, setAiReviewCached] = useState(false);
+  const [aiReviewSource, setAiReviewSource] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => () => { if (generatedArchive?.url) URL.revokeObjectURL(generatedArchive.url); }, [generatedArchive?.url]);
@@ -99,7 +147,21 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
     if (!saved) return;
     try {
       const local = JSON.parse(saved) as Organization[];
-      setOrganizations(local.map((item) => ({ id: item.id, name: item.name, uic: item.uic, address: item.address, manager: item.manager, representative: item.representative ?? item.manager, contact_name: item.contactName ?? "", contact_phone: item.contactPhone ?? "", contact_email: item.contactEmail, employees_count: item.employees, activity: item.activity })));
+      setOrganizations(local.map((item) => ({
+        id: item.id, name: item.name, uic: item.uic, legal_form: item.legalForm ?? "", address: item.address,
+        city: item.city ?? "", manager: item.manager, founded_at: item.foundedAt ?? "",
+        representative: item.representative ?? item.manager, contact_name: item.contactName ?? "",
+        contact_phone: item.contactPhone ?? "", contact_email: item.contactEmail, employees_count: item.employees,
+        activity: item.activity, physical_scope: item.physicalScope ?? "", system_date: item.systemDate ?? "",
+        organization_context: item.organizationContext ?? "", processes_description: item.processesDescription ?? "",
+        products_services: item.productsServices ?? "", environmental_aspects: item.environmentalAspects ?? "",
+        occupational_risks: item.occupationalRisks ?? "", external_parties: item.externalParties ?? "",
+        waste_management: item.wasteManagement ?? "", design_development: item.designDevelopment ?? "",
+        post_delivery_activities: item.postDeliveryActivities ?? "",
+        training_details: item.trainingDetails ?? "", internal_audit_date: item.internalAuditDate ?? "",
+        management_review_date: item.managementReviewDate ?? "", previous_year: item.previousYear ?? null,
+        current_year: item.currentYear ?? null
+      })));
     } catch { /* The export form can still be filled manually. */ }
   }, [supabase]);
 
@@ -113,8 +175,8 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
   useEffect(() => {
     if (!supabase || !user) { if (supabase) setLoading(false); return; }
     setLoading(true);
-    supabase.from("organizations").select("id,name,uic,address,manager,representative,contact_name,contact_phone,contact_email,employees_count,activity").order("name").then(({ data, error: loadError }) => {
-      if (loadError) setError(`Неуспешно зареждане на фирмите: ${loadError.message}`);
+    supabase.from("organizations").select("id,name,uic,legal_form,address,city,manager,founded_at,representative,contact_name,contact_phone,contact_email,employees_count,activity,physical_scope,system_date,organization_context,processes_description,products_services,environmental_aspects,occupational_risks,external_parties,waste_management,design_development,post_delivery_activities,training_details,internal_audit_date,management_review_date,previous_year,current_year").order("name").then(({ data, error: loadError }) => {
+      if (loadError) setError(`Неуспешно зареждане на фирмите: ${loadError.message}. Проверете дали миграции 012 и 013 са изпълнени в Supabase.`);
       else setOrganizations(data ?? []);
       setLoading(false);
     });
@@ -125,10 +187,21 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
     const organization = organizations.find((item) => item.id === id);
     if (!organization) return;
     setForm((current) => ({ ...current,
-      companyName: organization.name, uic: organization.uic, address: organization.address ?? "", manager: organization.manager ?? "",
+      companyName: organization.name, uic: organization.uic, legalForm: organization.legal_form ?? "",
+      address: organization.address ?? "", city: organization.city ?? "", manager: organization.manager ?? "",
+      foundedAt: organization.founded_at ?? "",
       representative: organization.representative ?? organization.manager ?? "", contactName: organization.contact_name ?? "",
       email: organization.contact_email ?? "", phone: organization.contact_phone ?? "", employees: organization.employees_count ?? "",
-      activity: organization.activity ?? "", scope: organization.activity ?? "", preparedBy: "", teamMember1: "", teamMember2: ""
+      activity: organization.activity ?? "", scope: organization.activity ?? "", physicalScope: organization.physical_scope ?? "",
+      systemDate: organization.system_date ?? "", organizationContext: organization.organization_context ?? "",
+      processesDescription: organization.processes_description ?? "", trainingDetails: organization.training_details ?? "",
+      productsServices: organization.products_services ?? "", environmentalAspects: organization.environmental_aspects ?? "",
+      occupationalRisks: organization.occupational_risks ?? "", externalParties: organization.external_parties ?? "",
+      wasteManagement: organization.waste_management ?? "", designDevelopment: organization.design_development ?? "",
+      postDeliveryActivities: organization.post_delivery_activities ?? "",
+      internalAuditDate: organization.internal_audit_date ?? "", managementReviewDate: organization.management_review_date ?? "",
+      previousYear: organization.previous_year ?? "", currentYear: organization.current_year ?? "",
+      effectiveDate: organization.system_date ?? "", preparedBy: "", teamMember1: "", teamMember2: ""
     }));
   }
 
@@ -154,9 +227,23 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
     return true;
   }
 
-  function exportPayload() {
-    const payload = Object.fromEntries(config.fields.map((spec) => [spec.key, form[spec.key]]));
-    return { ...payload, code: config.code, logoPngDataUrl, aiVisuals: aiVisuals.map((visual) => ({ title: visual.title, type: visual.type, pngDataUrl: visual.pngDataUrl, targetHash: visual.targetHash })) };
+  function currentReviewSource() {
+    return JSON.stringify({ code: config.code, form });
+  }
+
+  function exportPayload(includeAiTextEdits = true) {
+    const aiTextEdits = includeAiTextEdits && aiReviewSource === currentReviewSource()
+      ? aiSuggestions
+        .filter((item) => item.status === "accepted" && item.suggested.trim() && item.suggested.trim() !== item.original)
+        .map((item) => ({ file: item.file, source: item.original, replacement: item.suggested.trim() }))
+      : [];
+    return {
+      ...form,
+      code: config.code,
+      logoPngDataUrl,
+      aiVisuals: aiVisuals.map((visual) => ({ title: visual.title, type: visual.type, pngDataUrl: visual.pngDataUrl, targetHash: visual.targetHash })),
+      aiTextEdits
+    };
   }
 
   async function requestHeaders() {
@@ -179,6 +266,31 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
       setReport(payload.report);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Предварителната проверка не беше успешна."); }
     finally { setPreviewing(false); }
+  }
+
+  async function runAiReview() {
+    setError("");
+    if (!validateForm()) return;
+    setAiReviewing(true);
+    try {
+      const response = await fetch("/api/ai/review-documents", {
+        method: "POST",
+        headers: await requestHeaders(),
+        body: JSON.stringify(exportPayload(false))
+      });
+      const payload = await response.json().catch(() => null) as { review?: AiDocumentReview; report?: ExportReport; cached?: boolean; error?: string } | null;
+      if (!response.ok || !payload?.review) throw new Error(payload?.error ?? "AI прегледът не беше завършен.");
+      setAiReview(payload.review);
+      if (payload.report) setReport(payload.report);
+      setAiSuggestions(payload.review.suggestions.map((item) => ({ ...item, status: "pending" })));
+      setAiReviewCached(Boolean(payload.cached));
+      setAiReviewSource(currentReviewSource());
+      setAiReviewOpen(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "AI прегледът не беше завършен.");
+    } finally {
+      setAiReviewing(false);
+    }
   }
 
   async function generate() {
@@ -209,6 +321,7 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
         wordFiles: current?.wordFiles ?? 0, spreadsheetFiles: current?.spreadsheetFiles ?? 0,
         legacyFiles: Number(response.headers.get("x-legacy-files") ?? current?.legacyFiles ?? 0),
         textReplacements: Number(response.headers.get("x-text-replacements") ?? current?.textReplacements ?? 0),
+        aiTextReplacements: Number(response.headers.get("x-ai-text-replacements") ?? current?.aiTextReplacements ?? 0),
         logoReplacements: Number(response.headers.get("x-logo-replacements") ?? current?.logoReplacements ?? 0),
         imageReplacements: Number(response.headers.get("x-image-replacements") ?? current?.imageReplacements ?? 0),
         renamedPaths: current?.renamedPaths ?? 0, appliedFields: current?.appliedFields ?? [],
@@ -224,7 +337,10 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
 
   async function recordExportHistory(blob: Blob, filename: string) {
     const eventDate = new Date().toISOString();
-    const details = [form.version ? `версия ${form.version}` : "", form.effectiveDate ? `дата на влизане в сила ${formatDate(form.effectiveDate)}` : "", logoPngDataUrl ? "с фирмено лого" : "", aiVisuals.length ? `${aiVisuals.length} AI визуализации` : ""].filter(Boolean);
+    const acceptedAiCorrections = aiReviewSource === currentReviewSource()
+      ? aiSuggestions.filter((item) => item.status === "accepted" && item.suggested.trim() && item.suggested.trim() !== item.original).length
+      : 0;
+    const details = [form.version ? `версия ${form.version}` : "", form.effectiveDate ? `дата на влизане в сила ${formatDate(form.effectiveDate)}` : "", logoPngDataUrl ? "с фирмено лого" : "", aiVisuals.length ? `${aiVisuals.length} AI визуализации` : "", acceptedAiCorrections ? `${acceptedAiCorrections} одобрени AI текстови корекции` : ""].filter(Boolean);
     const description = `Генерирана е пълна ${config.code} система${details.length ? `, ${details.join(", ")}` : ""}.`;
     const entry: OrganizationHistoryEntry = { id: makeId(), organizationId: selectedId, eventType: "system_exported", description, eventDate, fileName: filename, fileSize: blob.size };
     if (supabase && user) {
@@ -262,6 +378,9 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
     if (meta.type === "textarea") {
       return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<textarea className="focus-ring min-h-24 rounded border border-line bg-white p-3 text-sm font-normal outline-none" placeholder={spec.key === "scope" ? config.scopePlaceholder : undefined} required={spec.required} value={form[spec.key] as string} onChange={(event) => setForm({ ...form, [spec.key]: event.target.value })} /></label>;
     }
+    if (spec.key === "designDevelopment") {
+      return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<select className={baseInput} required={spec.required} value={form.designDevelopment} onChange={(event) => setForm({ ...form, designDevelopment: event.target.value })}><option value="">Изберете приложимост</option><option value="not_applicable">Не е приложимо</option><option value="applicable">Приложимо е</option></select></label>;
+    }
     if (spec.key === "employees") {
       return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<input className={baseInput} min="0" required={spec.required} type="number" value={form.employees} onChange={(event) => setForm({ ...form, employees: event.target.value === "" ? "" : Number(event.target.value) })} /></label>;
     }
@@ -288,12 +407,27 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
           <AiVisualStudio companyName={form.companyName} onChange={setAiVisuals} standard={config.code} targets={config.visualTargets} value={aiVisuals} />
           {error ? <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p> : null}
         </div>
-        <div className="flex justify-end border-t border-line px-5 py-4"><button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60" disabled={previewing || generating || loading} type="submit">{previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}{previewing ? `Проверка на ${config.templateCount} файла...` : "Преглед и проверка"}</button></div>
+        <div className="flex flex-wrap justify-end gap-3 border-t border-line px-5 py-4">
+          <button className="focus-ring inline-flex items-center gap-2 rounded border border-teal-300 bg-white px-4 py-2.5 text-sm font-semibold text-teal-800 hover:bg-teal-50 disabled:opacity-60" disabled={aiReviewing || previewing || generating || loading} onClick={() => void runAiReview()} type="button">{aiReviewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}{aiReviewing ? `AI преглежда ${config.templateCount} файла...` : "AI смислов и езиков преглед"}</button>
+          <button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60" disabled={previewing || aiReviewing || generating || loading} type="submit">{previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}{previewing ? `Проверка на ${config.templateCount} файла...` : "Технически преглед"}</button>
+        </div>
       </form>
 
       <aside className="h-fit rounded border border-line bg-white p-4 shadow-soft"><div className="mb-4 flex items-center gap-2"><span className="grid h-9 w-9 place-items-center rounded bg-sky-50 text-action"><FileArchive className="h-4 w-4" /></span><div><h3 className="text-sm font-semibold text-ink">Комплект {config.code}</h3><p className="text-xs text-slate-500">{config.edition}</p></div></div><div className="space-y-3 text-sm text-slate-600">{config.contents.map((item, index) => <p className="flex items-center gap-2" key={item}>{index === 0 ? <FolderTree className="h-4 w-4 text-slate-400" /> : index === 1 ? <ShieldCheck className="h-4 w-4 text-slate-400" /> : <Archive className="h-4 w-4 text-slate-400" />}{item}</p>)}</div><div className="mt-4 border-t border-line pt-4"><p className="text-2xl font-semibold text-ink">{config.templateCount}</p><p className="text-xs text-slate-500">редактируеми файла в един ZIP архив</p></div><p className="mt-4 text-xs leading-5 text-slate-500">ZIP архивът се изтегля и се пази в „Генерирани системи“ за избраната фирма.{config.logoAspect ? " Каченото лого заменя фирменото лого в приложимите Word шаблони." : ""}</p></aside>
     </div>}
-    {report ? <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" role="dialog" aria-modal="true"><div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg border border-line bg-white shadow-2xl"><div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4"><div><p className="text-xs font-semibold uppercase text-action">{generatedArchive ? "Готов ZIP архив" : "Предварителен преглед"}</p><h3 className="mt-1 text-lg font-semibold text-ink">Проверка на {report.standard} за {report.companyName}</h3></div><button aria-label="Затвори" className="focus-ring grid h-9 w-9 place-items-center rounded hover:bg-panel" onClick={() => { setReport(null); setGeneratedArchive(null); }} type="button"><X className="h-5 w-5" /></button></div><div className="space-y-5 p-5"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><ReportMetric label="Общо файлове" value={report.totalFiles} /><ReportMetric label="Ще се променят" value={report.changedFiles} good /><ReportMetric label="Текстови замени" value={report.textReplacements} /><ReportMetric label="Непроменени" value={report.unchangedFiles} /></div><div className="grid gap-3 rounded border border-line bg-panel p-4 text-sm sm:grid-cols-2"><p>Word файлове: <strong>{report.wordFiles}</strong></p><p>Excel файлове: <strong>{report.spreadsheetFiles}</strong></p><p>Сменени лога: <strong>{report.logoReplacements}</strong></p><p>Сменени AI изображения: <strong>{report.imageReplacements}</strong></p><p>Преименувани заглавия: <strong>{report.renamedPaths}</strong></p><p>Стари DOC/XLS: <strong>{report.legacyFiles}</strong></p></div><div><p className="text-sm font-semibold text-ink">Данни, които ще бъдат приложени</p><div className="mt-2 flex flex-wrap gap-2">{report.appliedFields.map((field) => <span className="rounded border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-800" key={field}>{field}</span>)}</div></div>{report.warnings.length ? <div className="rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="mb-2 flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" />Предупреждения</p>{report.warnings.map((warning) => <p key={warning}>• {warning}</p>)}</div> : <p className="flex items-center gap-2 rounded border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800"><CheckCircle2 className="h-4 w-4" />Проверката не откри проблеми.</p>}</div><div className="flex flex-wrap justify-end gap-3 border-t border-line px-5 py-4"><button className="focus-ring rounded border border-line bg-white px-4 py-2.5 text-sm font-medium text-ink" onClick={() => { setReport(null); setGeneratedArchive(null); }} type="button">Затвори</button>{generatedArchive ? <a className="focus-ring inline-flex items-center gap-2 rounded bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700" download={generatedArchive.filename} href={generatedArchive.url}><Download className="h-4 w-4" />Свали проверения ZIP</a> : <button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60" disabled={generating} onClick={() => void generate()} type="button">{generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileArchive className="h-4 w-4" />}{generating ? "Генериране..." : "Генерирай проверен ZIP"}</button>}</div></div></div> : null}
+    {report && !aiReviewOpen && !generating ? <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4" role="dialog" aria-modal="true"><div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-lg border border-line bg-white shadow-2xl"><div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4"><div><p className="text-xs font-semibold uppercase text-action">{generatedArchive ? "Готов ZIP архив" : "Предварителен преглед"}</p><h3 className="mt-1 text-lg font-semibold text-ink">Проверка на {report.standard} за {report.companyName}</h3></div><button aria-label="Затвори" className="focus-ring grid h-9 w-9 place-items-center rounded hover:bg-panel" onClick={() => { setReport(null); setGeneratedArchive(null); }} type="button"><X className="h-5 w-5" /></button></div><div className="space-y-5 p-5"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><ReportMetric label="Общо файлове" value={report.totalFiles} /><ReportMetric label="Ще се променят" value={report.changedFiles} good /><ReportMetric label="Текстови замени" value={report.textReplacements} /><ReportMetric label="Непроменени" value={report.unchangedFiles} /></div><div className="grid gap-3 rounded border border-line bg-panel p-4 text-sm sm:grid-cols-2"><p>Word файлове: <strong>{report.wordFiles}</strong></p><p>Excel файлове: <strong>{report.spreadsheetFiles}</strong></p><p>AI текстови корекции: <strong>{report.aiTextReplacements}</strong></p><p>Сменени AI изображения: <strong>{report.imageReplacements}</strong></p><p>Сменени лога: <strong>{report.logoReplacements}</strong></p><p>Преименувани заглавия: <strong>{report.renamedPaths}</strong></p><p>Стари DOC/XLS: <strong>{report.legacyFiles}</strong></p></div><div><p className="text-sm font-semibold text-ink">Данни, които ще бъдат приложени</p><div className="mt-2 flex flex-wrap gap-2">{report.appliedFields.map((field) => <span className="rounded border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-800" key={field}>{field}</span>)}</div></div>{report.warnings.length ? <div className="rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p className="mb-2 flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" />Предупреждения</p>{report.warnings.map((warning) => <p key={warning}>• {warning}</p>)}</div> : <p className="flex items-center gap-2 rounded border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800"><CheckCircle2 className="h-4 w-4" />Проверката не откри проблеми.</p>}{report.files?.some((file) => file.contentWarnings.length) ? <div className="overflow-hidden rounded border border-red-200"><div className="border-b border-red-200 bg-red-50 px-4 py-3"><p className="text-sm font-semibold text-red-900">Файлове за задължителен преглед</p><p className="mt-1 text-xs text-red-700">Открити са характерни остатъци от чужди фирми или дейности.</p></div><div className="max-h-56 divide-y divide-red-100 overflow-auto">{report.files.filter((file) => file.contentWarnings.length).map((file) => <div className="px-4 py-3 text-sm" key={file.name}><p className="break-all font-medium text-ink">{file.name}</p><p className="mt-1 text-xs text-red-700">{file.contentWarnings.join(", ")}</p></div>)}</div></div> : null}</div><div className="flex flex-wrap justify-end gap-3 border-t border-line px-5 py-4"><button className="focus-ring rounded border border-line bg-white px-4 py-2.5 text-sm font-medium text-ink" onClick={() => { setReport(null); setGeneratedArchive(null); }} type="button">Затвори</button>{generatedArchive ? <a className="focus-ring inline-flex items-center gap-2 rounded bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700" download={generatedArchive.filename} href={generatedArchive.url}><Download className="h-4 w-4" />Свали проверения ZIP</a> : <button className="focus-ring inline-flex items-center gap-2 rounded bg-action px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60" disabled={generating} onClick={() => void generate()} type="button">{generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileArchive className="h-4 w-4" />}{generating ? "Генериране..." : "Генерирай проверен ZIP"}</button>}</div></div></div> : null}
+    {aiReview && aiReviewOpen ? <AiDocumentReviewDialog
+      cached={aiReviewCached}
+      generating={generating}
+      onChange={setAiSuggestions}
+      onClose={() => setAiReviewOpen(false)}
+      onGenerate={() => {
+        setAiReviewOpen(false);
+        void generate();
+      }}
+      review={aiReview}
+      suggestions={aiSuggestions}
+    /> : null}
   </div>;
 }
 
