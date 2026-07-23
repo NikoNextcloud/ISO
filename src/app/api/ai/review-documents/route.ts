@@ -10,7 +10,6 @@ import {
 } from "@/lib/ai-document-review";
 import { aiReviewRequestHash, consumeAiGeneration, createAiContext, readCachedReview, saveCachedReview } from "@/lib/ai-guard";
 import { generateCloudflareTextReview } from "@/lib/cloudflare-ai";
-import { generateGeminiTextReview, hasGeminiConfiguration } from "@/lib/gemini-ai";
 import { generateOpenAiTextReview, hasOpenAiConfiguration } from "@/lib/openai-ai";
 import {
   authorizeIsoExport,
@@ -24,7 +23,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-type AiReviewProvider = "auto" | "gemini" | "openai" | "cloudflare";
+type AiReviewProvider = "auto" | "openai" | "cloudflare";
 type ReviewRequest = IsoExportRequest & { code?: string; provider?: AiReviewProvider };
 type ProviderReviewResult = { response: string; model: string; warning?: string };
 
@@ -138,7 +137,7 @@ export async function POST(request: NextRequest) {
 }
 
 function normalizeProvider(value: unknown): AiReviewProvider {
-  return value === "gemini" || value === "openai" || value === "cloudflare" ? value : "auto";
+  return value === "openai" || value === "cloudflare" ? value : "auto";
 }
 
 async function generateProviderReview(
@@ -146,28 +145,25 @@ async function generateProviderReview(
   context: string,
   items: Array<{ id: string; text: string }>
 ): Promise<ProviderReviewResult> {
-  if (provider === "gemini") return generateGeminiTextReview(context, items);
   if (provider === "openai") return generateOpenAiTextReview(context, items);
   if (provider === "cloudflare") return generateCloudflareTextReview(context, items);
-
-  // "auto": предпочита безплатните доставчици с най-добро качество на български,
-  // с верижен fallback: Gemini -> OpenAI (ако е настроен) -> Cloudflare (винаги наличен).
-  const chain: Array<{ name: string; run: () => Promise<ProviderReviewResult> }> = [];
-  if (hasGeminiConfiguration()) chain.push({ name: "Gemini", run: () => generateGeminiTextReview(context, items) });
-  if (hasOpenAiConfiguration()) chain.push({ name: "OpenAI", run: () => generateOpenAiTextReview(context, items) });
-  chain.push({ name: "Cloudflare AI", run: () => generateCloudflareTextReview(context, items) });
-
-  const failures: string[] = [];
-  for (let index = 0; index < chain.length; index += 1) {
+  if (!hasOpenAiConfiguration()) {
+    const result = await generateCloudflareTextReview(context, items);
+    return { ...result, warning: "OPENAI_API_KEY не е настроен. Прегледът е извършен с Cloudflare AI." };
+  }
+  try {
+    return await generateOpenAiTextReview(context, items);
+  } catch (openAiError) {
     try {
-      const result = await chain[index].run();
-      const warning = failures.length ? `${failures.join(" ")} Прегледът премина към ${chain[index].name}.` : undefined;
-      return { ...result, warning };
-    } catch (error) {
-      failures.push(`${chain[index].name}: ${errorMessage(error)}`);
+      const result = await generateCloudflareTextReview(context, items);
+      return {
+        ...result,
+        warning: `OpenAI не беше достъпен и прегледът премина автоматично към Cloudflare AI: ${errorMessage(openAiError)}`
+      };
+    } catch (cloudflareError) {
+      throw new Error(`OpenAI: ${errorMessage(openAiError)} Cloudflare AI: ${errorMessage(cloudflareError)}`);
     }
   }
-  throw new Error(failures.join(" "));
 }
 
 function errorMessage(error: unknown) {
