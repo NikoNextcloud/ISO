@@ -32,7 +32,13 @@ const defaultOrganizations: Organization[] = [
   { id: "org-3", name: "Енерго Плант ЕООД", uic: "205098765", address: "Стара Загора, Производствен парк", manager: "Николай Димитров", contactEmail: "ims@energoplant.example", employees: 142, activity: "Енергийно интензивно производство", sites: 3, standards: ["ISO 9001", "ISO 14001", "ISO 45001", "ISO 50001"], status: "ready", readiness: 91, nextAuditDate: "2026-10-22" }
 ];
 
-const emptyOrganization: Organization = { id: "", name: "", uic: "", address: "", manager: "", representative: "", contactName: "", contactPhone: "", contactEmail: "", employees: 0, activity: "", sites: 1, standards: ["ISO 9001"], status: "draft", readiness: 0, nextAuditDate: "" };
+const emptyOrganization: Organization = {
+  id: "", name: "", uic: "", legalForm: "", address: "", city: "", manager: "", foundedAt: "",
+  representative: "", contactName: "", contactPhone: "", contactEmail: "", employees: 0, activity: "",
+  physicalScope: "", systemDate: "", organizationContext: "", processesDescription: "", trainingDetails: "",
+  internalAuditDate: "", managementReviewDate: "", previousYear: undefined, currentYear: undefined,
+  sites: 1, standards: ["ISO 9001"], status: "draft", readiness: 0, nextAuditDate: ""
+};
 
 const emptyCertificate: Omit<OrganizationCertificate, "id" | "organizationId" | "createdAt"> = {
   standard: "ISO 9001",
@@ -166,7 +172,11 @@ export function OrganizationWorkspace({ view }: { view: "dashboard" | "organizat
     const value = query.trim().toLocaleLowerCase("bg");
     if (!value) return organizations;
     return organizations.filter((organization) =>
-      [organization.name, organization.uic, organization.activity, organization.manager, ...organization.standards]
+      [
+        organization.name, organization.uic, organization.legalForm, organization.city, organization.address,
+        organization.activity, organization.physicalScope, organization.organizationContext,
+        organization.processesDescription, organization.manager, ...organization.standards
+      ]
         .join(" ").toLocaleLowerCase("bg").includes(value)
     );
   }, [organizations, query]);
@@ -344,37 +354,62 @@ export function OrganizationWorkspace({ view }: { view: "dashboard" | "organizat
       <div className="hidden overflow-x-auto rounded-lg border border-line bg-white shadow-soft md:block">
         <table className="w-full min-w-[1380px] text-left text-sm">
           <thead className="border-b border-line bg-panel text-xs font-semibold uppercase text-slate-500"><tr><th className="px-4 py-3">Фирма</th><th className="px-4 py-3">ЕИК</th><th className="px-4 py-3">Управител / контакт</th><th className="px-4 py-3">Телефон</th><th className="px-4 py-3 text-center">Служители</th><th className="px-4 py-3">Стандарти</th><th className="px-4 py-3 text-center">Сертификати</th><th className="px-4 py-3 text-center">Документи</th><th className="px-4 py-3">Следваща сертификация</th><th className="px-4 py-3 text-right">Действия</th></tr></thead>
-          <tbody>{filtered.map((organization) => <tr className="border-b border-line last:border-0" key={organization.id}><td className="max-w-64 px-4 py-4"><p className="font-medium text-ink">{organization.name}</p><p className="truncate text-xs text-slate-500">{organization.activity || "Без въведена дейност"}</p></td><td className="whitespace-nowrap px-4 py-4 text-slate-600">{organization.uic}</td><td className="px-4 py-4"><p className="text-ink">{organization.manager || "Не е посочен"}</p><p className="text-xs text-slate-500">{organization.contactName || organization.contactEmail || "Без контакт"}</p></td><td className="whitespace-nowrap px-4 py-4 text-slate-600">{organization.contactPhone || "Не е посочен"}</td><td className="px-4 py-4 text-center text-slate-600">{organization.employees}</td><td className="px-4 py-4"><StandardPills standards={organization.standards} /></td><td className="px-4 py-4 text-center font-medium text-ink">{certificates.filter((item) => item.organizationId === organization.id).length}</td><td className="px-4 py-4 text-center font-medium text-ink">{documentCounts[organization.id] ?? 0}</td><td className="whitespace-nowrap px-4 py-4 text-slate-600">{nextCertificationFor(organization.id, certificates)}</td><td className="px-4 py-4"><div className="flex justify-end gap-1"><Link aria-label={`Досие на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-600 hover:bg-panel hover:text-action" href={`/organizations/${organization.id}` as Route} title="Отвори досието"><FolderOpen className="h-4 w-4" /></Link><button aria-label={`Редактиране на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-600 hover:bg-panel hover:text-action" onClick={() => openEdit(organization)} title="Редактиране" type="button"><Edit3 className="h-4 w-4" /></button><button aria-label={`Изтриване на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-500 hover:bg-red-50 hover:text-red-700" onClick={() => removeOrganization(organization)} title="Изтриване" type="button"><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody>
+          <tbody>{filtered.map((organization) => <tr className="border-b border-line last:border-0" key={organization.id}><td className="max-w-64 px-4 py-4"><p className="font-medium text-ink">{organization.name}</p><p className="truncate text-xs text-slate-500">{[organization.legalForm, organization.city, organization.activity].filter(Boolean).join(" · ") || "Без въведена дейност"}</p></td><td className="whitespace-nowrap px-4 py-4 text-slate-600">{organization.uic}</td><td className="px-4 py-4"><p className="text-ink">{organization.manager || "Не е посочен"}</p><p className="text-xs text-slate-500">{organization.contactName || organization.contactEmail || "Без контакт"}</p></td><td className="whitespace-nowrap px-4 py-4 text-slate-600">{organization.contactPhone || "Не е посочен"}</td><td className="px-4 py-4 text-center text-slate-600">{organization.employees}</td><td className="px-4 py-4"><StandardPills standards={organization.standards} /></td><td className="px-4 py-4 text-center font-medium text-ink">{certificates.filter((item) => item.organizationId === organization.id).length}</td><td className="px-4 py-4 text-center font-medium text-ink">{documentCounts[organization.id] ?? 0}</td><td className="whitespace-nowrap px-4 py-4 text-slate-600">{nextCertificationFor(organization.id, certificates)}</td><td className="px-4 py-4"><div className="flex justify-end gap-1"><Link aria-label={`Досие на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-600 hover:bg-panel hover:text-action" href={`/organizations/${organization.id}` as Route} title="Отвори досието"><FolderOpen className="h-4 w-4" /></Link><button aria-label={`Редактиране на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-600 hover:bg-panel hover:text-action" onClick={() => openEdit(organization)} title="Редактиране" type="button"><Edit3 className="h-4 w-4" /></button><button aria-label={`Изтриване на ${organization.name}`} className="focus-ring grid h-9 w-9 place-items-center rounded text-slate-500 hover:bg-red-50 hover:text-red-700" onClick={() => removeOrganization(organization)} title="Изтриване" type="button"><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody>
         </table>
       </div>
 
       <div className="grid gap-3 md:hidden">{filtered.map((organization) => <div className="rounded-lg border border-line bg-white p-4 shadow-soft" key={organization.id}>
         <div className="flex items-start justify-between gap-3"><div><p className="font-medium text-ink">{organization.name}</p><p className="text-xs text-slate-500">ЕИК {organization.uic}</p></div><StatusBadge status={organization.status} /></div>
-        <p className="mt-3 text-sm text-slate-600">{organization.activity || "Без въведена дейност"}</p><div className="mt-3"><StandardPills standards={organization.standards} /></div>
+        <p className="mt-3 text-sm text-slate-600">{[organization.legalForm, organization.city, organization.activity].filter(Boolean).join(" · ") || "Без въведена дейност"}</p><div className="mt-3"><StandardPills standards={organization.standards} /></div>
         <div className="mt-4 flex gap-2"><Link className="focus-ring inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm" href={`/organizations/${organization.id}` as Route}><FolderOpen className="h-4 w-4" />Досие</Link><button className="focus-ring inline-flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm" onClick={() => openEdit(organization)} type="button"><Edit3 className="h-4 w-4" />Редактирай</button><button aria-label="Изтриване" className="focus-ring grid h-10 w-10 place-items-center rounded border border-line text-red-700" onClick={() => removeOrganization(organization)} type="button"><Trash2 className="h-4 w-4" /></button></div>
       </div>)}</div>
       {!filtered.length ? <div className="rounded border border-dashed border-line bg-white py-10 text-center text-sm text-slate-500">Няма фирми, които отговарят на търсенето.</div> : null}
     </Section> : null}
 
     {editing ? <div aria-modal="true" className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 sm:items-center sm:p-5" role="dialog">
-      <form className="max-h-[94vh] w-full overflow-y-auto rounded-t-lg bg-white shadow-xl sm:max-w-3xl sm:rounded-lg" onSubmit={saveOrganization}>
+      <form className="max-h-[94vh] w-full overflow-y-auto rounded-t-lg bg-white shadow-xl sm:max-w-5xl sm:rounded-lg" onSubmit={saveOrganization}>
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white px-5 py-4"><div><h2 className="text-base font-semibold text-ink">{organizations.some((item) => item.id === editing.id) ? "Редактиране на фирма" : "Нова фирма"}</h2><p className="text-xs text-slate-500">Полетата със звездичка са задължителни.</p></div><button aria-label="Затвори" className="focus-ring grid h-9 w-9 place-items-center rounded hover:bg-panel" onClick={() => setEditing(null)} type="button"><X className="h-5 w-5" /></button></div>
         <div className="grid gap-4 p-5 sm:grid-cols-2">
-          <Field label="Име на фирмата *"><input autoFocus required value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
-          <Field label="ЕИК *"><input inputMode="numeric" required value={editing.uic} onChange={(e) => setEditing({ ...editing, uic: e.target.value })} /></Field>
-          <Field label="Адрес"><input value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} /></Field>
-          <Field label="Управител"><input value={editing.manager} onChange={(e) => setEditing({ ...editing, manager: e.target.value })} /></Field>
+          <FormSectionTitle title="Основни данни за фирмата" />
+          <Field label="Име на фирмата *"><input autoFocus placeholder="ЕКОБУЛ ПАРТНЕР ООД" required value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
+          <Field label="ЕИК *"><input inputMode="numeric" placeholder="206395182" required value={editing.uic} onChange={(e) => setEditing({ ...editing, uic: e.target.value })} /></Field>
+          <Field label="Правна форма"><input placeholder="ООД" value={editing.legalForm ?? ""} onChange={(e) => setEditing({ ...editing, legalForm: e.target.value })} /></Field>
+          <Field label="Град"><input placeholder="Пазарджик" value={editing.city ?? ""} onChange={(e) => setEditing({ ...editing, city: e.target.value })} /></Field>
+          <Field label="Седалище/адрес"><input placeholder="гр. Пазарджик, ул. Найчо Цанов №11" value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} /></Field>
+          <Field label="Дата на създаване на фирмата"><input type="date" value={editing.foundedAt ?? ""} onChange={(e) => setEditing({ ...editing, foundedAt: e.target.value })} /></Field>
+          <Field label="Имейл"><input placeholder="office@ecobul.eu" type="email" value={editing.contactEmail} onChange={(e) => setEditing({ ...editing, contactEmail: e.target.value })} /></Field>
+          <Field label="Телефон"><input placeholder="0897550025" value={editing.contactPhone ?? ""} onChange={(e) => setEditing({ ...editing, contactPhone: e.target.value })} /></Field>
+          <Field label="Управител"><input placeholder="Николай Вилинов Острев" value={editing.manager} onChange={(e) => setEditing({ ...editing, manager: e.target.value })} /></Field>
+          <Field label="Дата на системата"><input type="date" value={editing.systemDate ?? ""} onChange={(e) => {
+            const systemDate = e.target.value;
+            setEditing({
+              ...editing,
+              systemDate,
+              internalAuditDate: editing.internalAuditDate || addDays(systemDate, 14),
+              managementReviewDate: editing.managementReviewDate || addDays(systemDate, 17)
+            });
+          }} /></Field>
+          <TextAreaField label="Обхват на дейност" placeholder="Складиране, съхранение, обработка, разглобяване, сортиране и разкомплектоване на отпадъчни тонер касети" value={editing.activity} onChange={(value) => setEditing({ ...editing, activity: value })} />
+          <TextAreaField label="Физически обхват" placeholder="Работни площадки, складове, административни помещения, инфраструктура, информационни системи" value={editing.physicalScope ?? ""} onChange={(value) => setEditing({ ...editing, physicalScope: value })} />
+          <fieldset className="sm:col-span-2"><legend className="mb-2 text-sm font-medium text-ink">ISO стандарти *</legend><div className="grid gap-2 sm:grid-cols-3">{standardOptions.map((standard) => <label className="flex cursor-pointer items-center gap-2 rounded border border-line px-3 py-2 text-sm hover:bg-panel" key={standard}><input checked={editing.standards.includes(standard)} className="h-4 w-4 accent-blue-600" onChange={(e) => setEditing({ ...editing, standards: e.target.checked ? [...editing.standards, standard] : editing.standards.filter((item) => item !== standard) })} type="checkbox" />{standard}</label>)}</div></fieldset>
+
+          <FormSectionTitle title="Данни за системата" />
+          <TextAreaField label="Контекст на организацията" placeholder="Описание на дейността, вътрешните и външните фактори на фирмата" value={editing.organizationContext ?? ""} onChange={(value) => setEditing({ ...editing, organizationContext: value })} />
+          <TextAreaField label="Процеси" placeholder="Управление, услуги, доставки, склад, клиенти, одити, несъответствия и др." value={editing.processesDescription ?? ""} onChange={(value) => setEditing({ ...editing, processesDescription: value })} />
+          <TextAreaField label="Обучения" placeholder="05.01.2022 г., обучител „Сириус Груп С“ ЕООД" value={editing.trainingDetails ?? ""} onChange={(value) => setEditing({ ...editing, trainingDetails: value })} />
+          <Field label="Вътрешен одит"><input type="date" value={editing.internalAuditDate ?? ""} onChange={(e) => setEditing({ ...editing, internalAuditDate: e.target.value })} /></Field>
+          <Field label="Преглед от ръководството"><input type="date" value={editing.managementReviewDate ?? ""} onChange={(e) => setEditing({ ...editing, managementReviewDate: e.target.value })} /></Field>
+          <Field label="Предходна година"><input inputMode="numeric" max="2200" min="1900" placeholder="2025" type="number" value={editing.previousYear ?? ""} onChange={(e) => setEditing({ ...editing, previousYear: e.target.value ? Number(e.target.value) : undefined })} /></Field>
+          <Field label="Настояща година"><input inputMode="numeric" max="2200" min="1900" placeholder="2026" type="number" value={editing.currentYear ?? ""} onChange={(e) => setEditing({ ...editing, currentYear: e.target.value ? Number(e.target.value) : undefined })} /></Field>
+
+          <FormSectionTitle title="Допълнителни административни данни" />
           <Field label="Представител на ръководството"><input value={editing.representative ?? ""} onChange={(e) => setEditing({ ...editing, representative: e.target.value })} /></Field>
           <Field label="Лице за контакт"><input value={editing.contactName ?? ""} onChange={(e) => setEditing({ ...editing, contactName: e.target.value })} /></Field>
-          <Field label="Телефон"><input value={editing.contactPhone ?? ""} onChange={(e) => setEditing({ ...editing, contactPhone: e.target.value })} /></Field>
-          <Field label="Имейл"><input type="email" value={editing.contactEmail} onChange={(e) => setEditing({ ...editing, contactEmail: e.target.value })} /></Field>
-          <Field label="Дейност"><input value={editing.activity} onChange={(e) => setEditing({ ...editing, activity: e.target.value })} /></Field>
           <Field label="Брой служители"><input min="0" type="number" value={editing.employees} onChange={(e) => setEditing({ ...editing, employees: Number(e.target.value) })} /></Field>
           <Field label="Брой обекти"><input min="0" type="number" value={editing.sites} onChange={(e) => setEditing({ ...editing, sites: Number(e.target.value) })} /></Field>
           <Field label="Статус"><select value={editing.status} onChange={(e) => setEditing({ ...editing, status: e.target.value as OrganizationStatus })}>{statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>
           <Field label={`Готовност: ${editing.readiness}%`}><input className="accent-blue-600" max="100" min="0" type="range" value={editing.readiness} onChange={(e) => setEditing({ ...editing, readiness: Number(e.target.value) })} /></Field>
           <Field label="Следващ одит"><input type="date" value={editing.nextAuditDate} onChange={(e) => setEditing({ ...editing, nextAuditDate: e.target.value })} /></Field>
-          <fieldset className="sm:col-span-2"><legend className="mb-2 text-sm font-medium text-ink">ISO стандарти *</legend><div className="grid gap-2 sm:grid-cols-3">{standardOptions.map((standard) => <label className="flex cursor-pointer items-center gap-2 rounded border border-line px-3 py-2 text-sm hover:bg-panel" key={standard}><input checked={editing.standards.includes(standard)} className="h-4 w-4 accent-blue-600" onChange={(e) => setEditing({ ...editing, standards: e.target.checked ? [...editing.standards, standard] : editing.standards.filter((item) => item !== standard) })} type="checkbox" />{standard}</label>)}</div></fieldset>
           {error ? <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p> : null}
         </div>
         <div className="sticky bottom-0 flex justify-end gap-2 border-t border-line bg-white px-5 py-4"><button className="focus-ring rounded border border-line px-4 py-2 text-sm font-medium hover:bg-panel" onClick={() => setEditing(null)} type="button">Отказ</button><button className="focus-ring rounded bg-action px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" type="submit">Запази фирмата</button></div>
@@ -420,18 +455,46 @@ function Field({ label, children }: { label: string; children: React.ReactElemen
   return <label className="grid gap-1.5 text-sm font-medium text-ink">{label}{cloneElement(children, { className: `focus-ring h-10 w-full rounded border border-line bg-white px-3 text-sm font-normal outline-none ${children.props.className ?? ""}` })}</label>;
 }
 
+function TextAreaField({ label, placeholder, value, onChange }: { label: string; placeholder?: string; value: string; onChange: (value: string) => void }) {
+  return <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2">{label}<textarea className="focus-ring min-h-24 w-full rounded border border-line bg-white p-3 text-sm font-normal outline-none" placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+function FormSectionTitle({ title }: { title: string }) {
+  return <div className="border-b border-line pb-2 pt-2 sm:col-span-2"><h3 className="text-sm font-semibold text-ink">{title}</h3></div>;
+}
+
+function addDays(value: string, days: number) {
+  if (!value) return "";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 type OrganizationRow = {
   id: string;
   name: string;
   uic: string;
+  legal_form: string | null;
   address: string | null;
+  city: string | null;
   manager: string | null;
+  founded_at: string | null;
   representative: string | null;
   contact_name: string | null;
   contact_phone: string | null;
   contact_email: string | null;
   employees_count: number;
   activity: string | null;
+  physical_scope: string | null;
+  system_date: string | null;
+  organization_context: string | null;
+  processes_description: string | null;
+  training_details: string | null;
+  internal_audit_date: string | null;
+  management_review_date: string | null;
+  previous_year: number | null;
+  current_year: number | null;
   sites_count: number;
   standards: IsoStandardCode[] | null;
   status: OrganizationStatus;
@@ -444,14 +507,26 @@ function fromDatabase(value: OrganizationRow): Organization {
     id: value.id,
     name: value.name,
     uic: value.uic,
+    legalForm: value.legal_form ?? "",
     address: value.address ?? "",
+    city: value.city ?? "",
     manager: value.manager ?? "",
+    foundedAt: value.founded_at ?? "",
     representative: value.representative ?? "",
     contactName: value.contact_name ?? "",
     contactPhone: value.contact_phone ?? "",
     contactEmail: value.contact_email ?? "",
     employees: value.employees_count ?? 0,
     activity: value.activity ?? "",
+    physicalScope: value.physical_scope ?? "",
+    systemDate: value.system_date ?? "",
+    organizationContext: value.organization_context ?? "",
+    processesDescription: value.processes_description ?? "",
+    trainingDetails: value.training_details ?? "",
+    internalAuditDate: value.internal_audit_date ?? "",
+    managementReviewDate: value.management_review_date ?? "",
+    previousYear: value.previous_year ?? undefined,
+    currentYear: value.current_year ?? undefined,
     sites: value.sites_count ?? 1,
     standards: value.standards ?? [],
     status: value.status,
@@ -466,14 +541,26 @@ function toDatabase(value: Organization, ownerId: string) {
     owner_id: ownerId,
     name: value.name.trim(),
     uic: value.uic.trim(),
+    legal_form: value.legalForm?.trim() || null,
     address: value.address.trim() || null,
+    city: value.city?.trim() || null,
     manager: value.manager.trim() || null,
+    founded_at: value.foundedAt || null,
     representative: value.representative?.trim() || null,
     contact_name: value.contactName?.trim() || null,
     contact_phone: value.contactPhone?.trim() || null,
     contact_email: value.contactEmail.trim() || null,
     employees_count: value.employees,
     activity: value.activity.trim() || null,
+    physical_scope: value.physicalScope?.trim() || null,
+    system_date: value.systemDate || null,
+    organization_context: value.organizationContext?.trim() || null,
+    processes_description: value.processesDescription?.trim() || null,
+    training_details: value.trainingDetails?.trim() || null,
+    internal_audit_date: value.internalAuditDate || null,
+    management_review_date: value.managementReviewDate || null,
+    previous_year: value.previousYear ?? null,
+    current_year: value.currentYear ?? null,
     sites_count: value.sites,
     standards: value.standards,
     status: value.status,

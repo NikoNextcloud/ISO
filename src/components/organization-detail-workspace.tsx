@@ -196,7 +196,31 @@ export function OrganizationDetailWorkspace({ organizationId }: { organizationId
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><Summary icon={Building2} label="Избрани стандарти" value={organization.standards.length} /><Summary icon={Award} label="Сертификати" value={certificates.length} /><Summary icon={CalendarClock} label="Следваща сертификация" value={formatDate(nextCertification)} /><Summary icon={FileText} label="Документи" value={documents.length} /><Summary icon={ClipboardCheck} label="Реална готовност" value={`${checklist?.percent ?? 0}%`} /></div>
 
-    <section className="border-t border-line pt-6"><h3 className="mb-4 text-base font-semibold text-ink">Основни данни</h3><dl className="grid gap-x-8 gap-y-4 rounded border border-line bg-white p-5 text-sm shadow-soft sm:grid-cols-2 xl:grid-cols-3"><Data label="Адрес" value={organization.address} /><Data label="Управител" value={organization.manager} /><Data label="Представител" value={organization.representative} /><Data label="Лице за контакт" value={organization.contactName} /><Data label="Телефон" value={organization.contactPhone} /><Data label="Имейл" value={organization.contactEmail} /><Data label="Дейност" value={organization.activity} /><Data label="Служители" value={String(organization.employees)} /><Data label="Обекти" value={String(organization.sites)} /></dl></section>
+    <section className="border-t border-line pt-6"><h3 className="mb-4 text-base font-semibold text-ink">Основни данни</h3><dl className="grid gap-x-8 gap-y-4 rounded border border-line bg-white p-5 text-sm shadow-soft sm:grid-cols-2 xl:grid-cols-3">
+      <Data label="Име на фирмата" value={organization.name} />
+      <Data label="ЕИК" value={organization.uic} />
+      <Data label="Правна форма" value={organization.legalForm} />
+      <Data label="Седалище/адрес" value={organization.address} />
+      <Data label="Град" value={organization.city} />
+      <Data label="Управител" value={organization.manager} />
+      <Data label="Дата на създаване" value={formatOptionalDate(organization.foundedAt)} />
+      <Data label="Телефон" value={organization.contactPhone} />
+      <Data label="Имейл" value={organization.contactEmail} />
+      <Data label="Обхват на дейност" value={organization.activity} />
+      <Data label="Физически обхват" value={organization.physicalScope} />
+      <Data label="Дата на системата" value={formatOptionalDate(organization.systemDate)} />
+      <Data label="Контекст на организацията" value={organization.organizationContext} />
+      <Data label="Процеси" value={organization.processesDescription} />
+      <Data label="Обучения" value={organization.trainingDetails} />
+      <Data label="Вътрешен одит" value={formatOptionalDate(organization.internalAuditDate)} />
+      <Data label="Преглед от ръководството" value={formatOptionalDate(organization.managementReviewDate)} />
+      <Data label="Предходна година" value={organization.previousYear ? String(organization.previousYear) : ""} />
+      <Data label="Настояща година" value={organization.currentYear ? String(organization.currentYear) : ""} />
+      <Data label="Представител" value={organization.representative} />
+      <Data label="Лице за контакт" value={organization.contactName} />
+      <Data label="Служители" value={String(organization.employees)} />
+      <Data label="Обекти" value={String(organization.sites)} />
+    </dl></section>
 
     <section className="border-t border-line pt-6"><h3 className="mb-4 text-base font-semibold text-ink">Избрани ISO стандарти</h3><div className="rounded border border-line bg-white p-5 shadow-soft"><StandardPills standards={organization.standards} /></div></section>
 
@@ -222,16 +246,40 @@ function Notice({ title, text }: { title: string; text: string }) { return <div 
 function Field({ label, children }: { label: string; children: React.ReactElement<{ className?: string }> }) { return <label className="grid gap-1.5 text-sm font-medium text-ink">{label}{cloneElement(children, { className: `focus-ring h-10 rounded border border-line bg-white px-3 font-normal outline-none ${children.props.className ?? ""}` })}</label>; }
 function makeId() { return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `record-${Date.now()}`; }
 function formatDate(value: string) { return value ? new Intl.DateTimeFormat("bg-BG").format(new Date(`${value}T00:00:00`)) : "Не е зададена"; }
+function formatOptionalDate(value?: string) { return value ? formatDate(value) : ""; }
 function formatDateTime(value: string) { return new Intl.DateTimeFormat("bg-BG", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 function formatFileSize(value: number) { if (!value) return "0 KB"; if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`; return `${(value / 1024 / 1024).toFixed(1)} MB`; }
 function safeFileName(value: string) { return value.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(0, 140) || "file"; }
 
-type OrganizationRow = { id: string; name: string; uic: string; address: string | null; manager: string | null; representative: string | null; contact_name: string | null; contact_phone: string | null; contact_email: string | null; employees_count: number; activity: string | null; sites_count: number; standards: IsoStandardCode[] | null; status: OrganizationStatus; readiness_percent: number; next_audit_date: string | null };
+type OrganizationRow = {
+  id: string; name: string; uic: string; legal_form: string | null; address: string | null; city: string | null;
+  manager: string | null; founded_at: string | null; representative: string | null; contact_name: string | null;
+  contact_phone: string | null; contact_email: string | null; employees_count: number; activity: string | null;
+  physical_scope: string | null; system_date: string | null; organization_context: string | null;
+  processes_description: string | null; training_details: string | null; internal_audit_date: string | null;
+  management_review_date: string | null; previous_year: number | null; current_year: number | null;
+  sites_count: number; standards: IsoStandardCode[] | null; status: OrganizationStatus; readiness_percent: number;
+  next_audit_date: string | null;
+};
 type CertificateRow = { id: string; organization_id: string; standard: IsoStandardCode; certificate_number: string | null; certification_body: string | null; issued_at: string | null; valid_until: string | null; next_certification_date: string | null; notes: string | null; created_at: string };
 type HistoryRow = { id: string; organization_id: string; event_type: OrganizationHistoryEntry["eventType"]; description: string; event_date: string; file_path: string | null; file_name: string | null; file_size: number | null };
 type DocumentRow = { id: string; organization_id: string; title: string; document_type: ImsDocument["type"]; standards: IsoStandardCode[]; owner: string | null; status: DocumentStatus; version: string; content: { body?: string } | string | null; updated_at: string; file_path: string | null; original_filename: string | null; file_size: number | null; mime_type: string | null };
 
-function organizationFromDatabase(value: OrganizationRow): Organization { return { id: value.id, name: value.name, uic: value.uic, address: value.address ?? "", manager: value.manager ?? "", representative: value.representative ?? "", contactName: value.contact_name ?? "", contactPhone: value.contact_phone ?? "", contactEmail: value.contact_email ?? "", employees: value.employees_count ?? 0, activity: value.activity ?? "", sites: value.sites_count ?? 1, standards: value.standards ?? [], status: value.status, readiness: value.readiness_percent ?? 0, nextAuditDate: value.next_audit_date ?? "" }; }
+function organizationFromDatabase(value: OrganizationRow): Organization {
+  return {
+    id: value.id, name: value.name, uic: value.uic, legalForm: value.legal_form ?? "", address: value.address ?? "",
+    city: value.city ?? "", manager: value.manager ?? "", foundedAt: value.founded_at ?? "",
+    representative: value.representative ?? "", contactName: value.contact_name ?? "",
+    contactPhone: value.contact_phone ?? "", contactEmail: value.contact_email ?? "",
+    employees: value.employees_count ?? 0, activity: value.activity ?? "", physicalScope: value.physical_scope ?? "",
+    systemDate: value.system_date ?? "", organizationContext: value.organization_context ?? "",
+    processesDescription: value.processes_description ?? "", trainingDetails: value.training_details ?? "",
+    internalAuditDate: value.internal_audit_date ?? "", managementReviewDate: value.management_review_date ?? "",
+    previousYear: value.previous_year ?? undefined, currentYear: value.current_year ?? undefined,
+    sites: value.sites_count ?? 1, standards: value.standards ?? [], status: value.status,
+    readiness: value.readiness_percent ?? 0, nextAuditDate: value.next_audit_date ?? ""
+  };
+}
 function certificateFromDatabase(value: CertificateRow): OrganizationCertificate { return { id: value.id, organizationId: value.organization_id, standard: value.standard, certificateNumber: value.certificate_number ?? "", certificationBody: value.certification_body ?? "", issuedAt: value.issued_at ?? "", validUntil: value.valid_until ?? "", nextCertificationDate: value.next_certification_date ?? "", notes: value.notes ?? "", createdAt: value.created_at }; }
 function certificateToDatabase(value: OrganizationCertificate) { return { id: value.id, organization_id: value.organizationId, standard: value.standard, certificate_number: value.certificateNumber.trim(), certification_body: value.certificationBody.trim() || null, issued_at: value.issuedAt || null, valid_until: value.validUntil || null, next_certification_date: value.nextCertificationDate || null, notes: value.notes.trim() || null, created_at: value.createdAt }; }
 function historyFromDatabase(value: HistoryRow): OrganizationHistoryEntry { return { id: value.id, organizationId: value.organization_id, eventType: value.event_type, description: value.description, eventDate: value.event_date, filePath: value.file_path ?? undefined, fileName: value.file_name ?? undefined, fileSize: value.file_size ?? undefined }; }

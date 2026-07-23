@@ -7,8 +7,11 @@ import { readZip, replaceSpreadsheetTextWithStats, replaceWordTextWithStats, wri
 export type IsoExportRequest = {
   companyName: string;
   uic?: string;
+  legalForm?: string;
   address?: string;
+  city?: string;
   manager?: string;
+  foundedAt?: string;
   representative?: string;
   contactName?: string;
   email?: string;
@@ -16,6 +19,15 @@ export type IsoExportRequest = {
   employees?: number | string;
   activity?: string;
   scope?: string;
+  physicalScope?: string;
+  systemDate?: string;
+  organizationContext?: string;
+  processesDescription?: string;
+  trainingDetails?: string;
+  internalAuditDate?: string;
+  managementReviewDate?: string;
+  previousYear?: number | string;
+  currentYear?: number | string;
   effectiveDate?: string;
   version?: string;
   preparedBy?: string;
@@ -33,8 +45,11 @@ export type IsoExportRequest = {
 type NormalizedExportData = {
   companyName: string;
   uic: string;
+  legalForm: string;
   address: string;
+  city: string;
   manager: string;
+  foundedAt: string;
   representative: string;
   contactName: string;
   email: string;
@@ -42,6 +57,15 @@ type NormalizedExportData = {
   employees?: number;
   activity: string;
   scope: string;
+  physicalScope: string;
+  systemDate: string;
+  organizationContext: string;
+  processesDescription: string;
+  trainingDetails: string;
+  internalAuditDate: string;
+  managementReviewDate: string;
+  previousYear?: number;
+  currentYear?: number;
   effectiveDate: string;
   version: string;
   preparedBy: string;
@@ -388,27 +412,50 @@ export const iso90011400145001ExportConfig: IsoExportConfig = {
         ["ИВАН ГЕОРГИЕВ", manager.toLocaleUpperCase("bg")]
       ]),
       ...replacementsWhen(data.uic, (uic) => [["206395182", uic]]),
+      ...replacementsWhen(data.city, (city) => [
+        ["гр. Пазарджик", city.toLocaleLowerCase("bg").startsWith("гр.") ? city : `гр. ${city}`]
+      ]),
       ...replacementsWhen(data.address, (address) => [
         ["гр. Пазарджик, област Пазарджик, община Пазарджик ул Найчо Цанов №11", address],
         ["гр. Пазарджик, област Пазарджик, община Пазарджик, ул. Найчо Цанов №11", address],
         ["гр. Пазарджик", address]
       ]),
+      ...replacementsWhen(data.foundedAt, (date) => [
+        ["15.02.2021 г.", `${formatDate(date)} г.`],
+        ["15.02.2021", formatDate(date)]
+      ]),
       ...replacementsWhen(data.email, (email) => [["office@ecobul.eu", email]]),
       ...replacementsWhen(data.phone, (phone) => [["0897550025", phone]]),
       ...replacementsWhen(data.activity, (activity) => [
+        ["Складиране, съхранение, обработка, разглобяване, сортиране и разкомплектоване на ИУЕЕО и отпадъчни тонер касети", activity],
         ["извършва дейности по третиране на отпадъци", `извършва основна дейност: ${activity}`]
+      ]),
+      ...replacementsWhen(data.physicalScope, (scope) => [
+        ["Работни площадки, складове, административни помещения, инфраструктура, информационни системи", scope]
+      ]),
+      ...replacementsWhen(data.organizationContext, (context) => [
+        ["Има текстове за дейността на фирмата", context]
+      ]),
+      ...replacementsWhen(data.processesDescription, (processes) => [
+        ["Управление, услуги, доставки, склад, клиенти, одити, несъответствия и др.", processes]
+      ]),
+      ...replacementsWhen(data.trainingDetails, (training) => [
+        ["05.01.2022 г., обучител „Сириус Груп С“ ЕООД", training],
+        ["05.01.2022 г., обучител \"Сириус Груп С\" ЕООД", training]
       ]),
       ...replacementsWhen(data.effectiveDate, (date) => {
         const formatted = formatDate(date);
+        const internalAudit = formatDate(data.internalAuditDate || date);
+        const managementReview = formatDate(data.managementReviewDate || date);
         return [
-          ["27.01.2022 г.", `${formatted} г.`],
-          ["27.01.2022 г", `${formatted} г.`],
-          ["27.01.2022", formatted],
+          ["27.01.2022 г.", `${internalAudit} г.`],
+          ["27.01.2022 г", `${internalAudit} г.`],
+          ["27.01.2022", internalAudit],
           ["20.01.2022 г.", `${formatted} г.`],
           ["20.01.2022", formatted],
-          ["28.01.2022 г.", `${formatted} г.`],
-          ["28.01.2022г.", `${formatted} г.`],
-          ["28.01.2022", formatted],
+          ["28.01.2022 г.", `${managementReview} г.`],
+          ["28.01.2022г.", `${managementReview} г.`],
+          ["28.01.2022", managementReview],
           ["20.12.2021 г.", `${formatted} г.`],
           ["20.12.2021", formatted],
           ["27.01.2021 г.", `${formatted} г.`],
@@ -553,9 +600,18 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
 
   const summary = [
     `${config.edition} - комплект документация`, `Организация: ${data.companyName}`,
-    ...summaryWhen(data.uic, "ЕИК"), ...summaryWhen(data.address, "Адрес"), ...summaryWhen(data.manager, "Управител"),
+    ...summaryWhen(data.uic, "ЕИК"), ...summaryWhen(data.legalForm, "Правна форма"),
+    ...summaryWhen(data.address, "Седалище/адрес"), ...summaryWhen(data.city, "Град"),
+    ...summaryWhen(data.manager, "Управител"), ...summaryWhen(data.foundedAt ? formatDate(data.foundedAt) : "", "Дата на създаване"),
     ...summaryWhen(data.preparedBy, "Изготвил/Отговорник"),
-    ...summaryWhen(data.activity, "Основна дейност"), ...summaryWhen(data.scope, "Обхват"),
+    ...summaryWhen(data.activity, "Обхват на дейност"), ...summaryWhen(data.scope, "Обхват"),
+    ...summaryWhen(data.physicalScope, "Физически обхват"),
+    ...summaryWhen(data.organizationContext, "Контекст на организацията"),
+    ...summaryWhen(data.processesDescription, "Процеси"), ...summaryWhen(data.trainingDetails, "Обучения"),
+    ...summaryWhen(data.internalAuditDate ? formatDate(data.internalAuditDate) : "", "Вътрешен одит"),
+    ...summaryWhen(data.managementReviewDate ? formatDate(data.managementReviewDate) : "", "Преглед от ръководството"),
+    ...summaryWhen(data.previousYear === undefined ? "" : String(data.previousYear), "Предходна година"),
+    ...summaryWhen(data.currentYear === undefined ? "" : String(data.currentYear), "Настояща година"),
     ...summaryWhen(data.effectiveDate ? formatDate(data.effectiveDate) : "", "Дата на влизане в сила"),
     ...summaryWhen(data.version, "Версия"),
     `Дата на генериране: ${formatDate(new Date().toISOString().slice(0, 10))}`, `Документи: ${files.length}`,
@@ -615,11 +671,19 @@ function createExportReport(config: IsoExportConfig, data: NormalizedExportData,
   if (data.logoPngDataUrl && !files.some((file) => file.logoReplacements > 0)) warnings.push("Не е намерено подходящо фирмено лого за замяна");
   if (data.aiVisuals.some((visual) => visual.targetHash) && !files.some((file) => file.imageReplacements > 0)) warnings.push("Не е намерено съвпадащо служебно изображение за замяна");
   const appliedFields = [
-    ["Име на фирмата", data.companyName], ["ЕИК", data.uic], ["Адрес", data.address], ["Управител", data.manager],
+    ["Име на фирмата", data.companyName], ["ЕИК", data.uic], ["Правна форма", data.legalForm],
+    ["Седалище/адрес", data.address], ["Град", data.city], ["Управител", data.manager],
+    ["Дата на създаване", data.foundedAt],
     ["Представител", data.representative], ["Лице за контакт", data.contactName], ["Имейл", data.email], ["Телефон", data.phone],
     ["Изготвил/Отговорник", data.preparedBy],
     ["Член на енергийния екип 1", data.teamMember1], ["Член на енергийния екип 2", data.teamMember2],
-    ["Брой служители", data.employees === undefined ? "" : String(data.employees)], ["Дейност", data.activity], ["Обхват", data.scope],
+    ["Брой служители", data.employees === undefined ? "" : String(data.employees)], ["Обхват на дейност", data.activity], ["Обхват", data.scope],
+    ["Физически обхват", data.physicalScope], ["Дата на системата", data.systemDate],
+    ["Контекст на организацията", data.organizationContext], ["Процеси", data.processesDescription],
+    ["Обучения", data.trainingDetails], ["Вътрешен одит", data.internalAuditDate],
+    ["Преглед от ръководството", data.managementReviewDate],
+    ["Предходна година", data.previousYear === undefined ? "" : String(data.previousYear)],
+    ["Настояща година", data.currentYear === undefined ? "" : String(data.currentYear)],
     ["Дата", data.effectiveDate], ["Версия", data.version]
   ].filter((entry) => entry[1]).map((entry) => entry[0]);
   return {
@@ -643,12 +707,21 @@ function createExportReport(config: IsoExportConfig, data: NormalizedExportData,
 }
 
 function normalizeRequest(body: IsoExportRequest): NormalizedExportData {
+  const systemDate = optionalText(body.systemDate, 20);
   return {
     companyName: requiredText(body.companyName, "Име на фирмата"), uic: optionalText(body.uic, 30),
-    address: optionalText(body.address), manager: optionalText(body.manager), representative: optionalText(body.representative),
+    legalForm: optionalText(body.legalForm, 80), address: optionalText(body.address), city: optionalText(body.city, 120),
+    manager: optionalText(body.manager), foundedAt: optionalText(body.foundedAt, 20), representative: optionalText(body.representative),
     contactName: optionalText(body.contactName), email: optionalText(body.email, 200), phone: optionalText(body.phone, 80),
     employees: optionalNumber(body.employees), activity: optionalText(body.activity, 1000), scope: optionalText(body.scope, 1500),
-    effectiveDate: optionalText(body.effectiveDate, 20), version: optionalText(body.version, 20),
+    physicalScope: optionalText(body.physicalScope, 1500), systemDate,
+    organizationContext: optionalText(body.organizationContext, 2000),
+    processesDescription: optionalText(body.processesDescription, 2000),
+    trainingDetails: optionalText(body.trainingDetails, 1500),
+    internalAuditDate: optionalText(body.internalAuditDate, 20),
+    managementReviewDate: optionalText(body.managementReviewDate, 20),
+    previousYear: optionalYear(body.previousYear), currentYear: optionalYear(body.currentYear),
+    effectiveDate: optionalText(body.effectiveDate, 20) || systemDate, version: optionalText(body.version, 20),
     preparedBy: optionalText(body.preparedBy), teamMember1: optionalText(body.teamMember1), teamMember2: optionalText(body.teamMember2),
     logoPngDataUrl: optionalText(body.logoPngDataUrl, 5_800_000),
     aiVisuals: normalizeAiVisuals(body.aiVisuals)
@@ -658,15 +731,25 @@ function normalizeRequest(body: IsoExportRequest): NormalizedExportData {
 function baseReplacements(data: NormalizedExportData): Array<[string, string]> {
   const result: Array<[string, string]> = [["{{COMPANY_NAME}}", data.companyName]];
   const optionalValues: Array<[string, string]> = [
-    ["{{UIC}}", data.uic], ["{{ADDRESS}}", data.address], ["{{MANAGER}}", data.manager],
+    ["{{UIC}}", data.uic], ["{{LEGAL_FORM}}", data.legalForm], ["{{ADDRESS}}", data.address],
+    ["{{CITY}}", data.city], ["{{MANAGER}}", data.manager],
+    ["{{FOUNDED_AT}}", data.foundedAt ? formatDate(data.foundedAt) : ""],
     ["{{REPRESENTATIVE}}", data.representative], ["{{CONTACT_NAME}}", data.contactName],
     ["{{EMAIL}}", data.email], ["{{PHONE}}", data.phone], ["{{ACTIVITY}}", data.activity],
-    ["{{SCOPE}}", data.scope], ["{{EFFECTIVE_DATE}}", data.effectiveDate ? formatDate(data.effectiveDate) : ""],
+    ["{{SCOPE}}", data.scope], ["{{PHYSICAL_SCOPE}}", data.physicalScope],
+    ["{{SYSTEM_DATE}}", data.systemDate ? formatDate(data.systemDate) : ""],
+    ["{{ORGANIZATION_CONTEXT}}", data.organizationContext], ["{{PROCESSES}}", data.processesDescription],
+    ["{{TRAINING_DETAILS}}", data.trainingDetails],
+    ["{{INTERNAL_AUDIT_DATE}}", data.internalAuditDate ? formatDate(data.internalAuditDate) : ""],
+    ["{{MANAGEMENT_REVIEW_DATE}}", data.managementReviewDate ? formatDate(data.managementReviewDate) : ""],
+    ["{{EFFECTIVE_DATE}}", data.effectiveDate ? formatDate(data.effectiveDate) : ""],
     ["{{VERSION}}", data.version], ["{{PREPARED_BY}}", data.preparedBy],
     ["{{TEAM_MEMBER_1}}", data.teamMember1], ["{{TEAM_MEMBER_2}}", data.teamMember2]
   ];
   optionalValues.forEach(([placeholder, value]) => { if (value) result.push([placeholder, value]); });
   if (data.employees !== undefined) result.push(["{{EMPLOYEES}}", String(data.employees)]);
+  if (data.previousYear !== undefined) result.push(["{{PREVIOUS_YEAR}}", String(data.previousYear)]);
+  if (data.currentYear !== undefined) result.push(["{{CURRENT_YEAR}}", String(data.currentYear)]);
   return result;
 }
 
@@ -730,6 +813,11 @@ function optionalNumber(value: unknown) {
   if (value === "" || value === null || value === undefined) return undefined;
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : undefined;
+}
+
+function optionalYear(value: unknown) {
+  const year = optionalNumber(value);
+  return year !== undefined && year >= 1900 && year <= 2200 ? year : undefined;
 }
 
 function replacementsWhen(value: string, build: (value: string) => Array<[string, string]>) {

@@ -64,7 +64,7 @@ npm run dev
 
 ### 1. Създаване на таблиците
 
-За нов Supabase проект изпълнете последователно всички SQL файлове от `supabase/migrations/001_initial_schema.sql` до `supabase/migrations/011_seed_iso_9001_14001_45001.sql` в Supabase Dashboard -> SQL Editor.
+За нов Supabase проект изпълнете последователно всички SQL файлове от `supabase/migrations/001_initial_schema.sql` до `supabase/migrations/012_extended_organization_profile.sql` в Supabase Dashboard -> SQL Editor.
 
 Ако първата миграция вече е изпълнена, изпълнете последователно:
 
@@ -78,6 +78,8 @@ npm run dev
 8. `supabase/migrations/009_ai_cache_and_rate_limit.sql`
 9. `supabase/migrations/010_add_iso_9001_14001_45001.sql`
 10. `supabase/migrations/011_seed_iso_9001_14001_45001.sql`
+11. `supabase/migrations/011_remove_iso_9_14_45.sql`
+12. `supabase/migrations/012_extended_organization_profile.sql`
 
 ### 2. Единствен потребител
 
