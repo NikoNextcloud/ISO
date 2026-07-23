@@ -10,6 +10,7 @@ import { Iso50001ExportWorkspace } from "@/components/iso50001-export-workspace"
 import { Iso902027ExportWorkspace } from "@/components/iso902027-export-workspace";
 import { Iso91445ExportWorkspace } from "@/components/iso91445-export-workspace";
 import { Iso914ExportWorkspace } from "@/components/iso914-export-workspace";
+import { Iso90011400145001ExportWorkspace } from "@/components/iso90011400145001-export-workspace";
 import { TemplateManager } from "@/components/template-manager";
 import { Section } from "@/components/ui";
 import { documents as localDocuments, standards } from "@/lib/mock-data";
@@ -30,13 +31,18 @@ const integrated91445Standard = {
   title: "Интегрирана система за качество, околна среда и безопасност",
   scope: "ISO 9001, ISO 14001 и ISO 45001 в обща система."
 };
+const integrated90011400145001Standard = {
+  code: "ISO 9001-14001-45001" as const,
+  title: "Интегрирана система за качество, околна среда и здраве и безопасност при работа",
+  scope: "Пълен комплект по ISO 9001, ISO 14001 и ISO 45001 с наръчник, процедури, записи и одитна подготовка."
+};
 const integrated914Standard = {
   code: "ISO 9-14" as const,
   title: "Интегрирана система за качество и околна среда",
   scope: "ISO 9001 и ISO 14001 в обща система."
 };
-const standardCards = [...standards, integratedStandard, integrated91445Standard, integrated914Standard];
-const templateCounts: Partial<Record<StandardCardCode, number>> = { "ISO 9001": 31, "ISO 14001": 12, "ISO 27001": 84, "ISO 45001": 60, "ISO 50001": 24, "ISO 9-20-27": 271, "ISO 9-14-45": 54, "ISO 9-14": 34 };
+const standardCards = [...standards, integratedStandard, integrated91445Standard, integrated90011400145001Standard, integrated914Standard];
+const templateCounts: Partial<Record<StandardCardCode, number>> = { "ISO 9001": 31, "ISO 14001": 12, "ISO 27001": 84, "ISO 45001": 60, "ISO 50001": 24, "ISO 9-20-27": 271, "ISO 9-14-45": 54, "ISO 9001-14001-45001": 63, "ISO 9-14": 34 };
 
 export function StandardsWorkspace() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -86,6 +92,7 @@ export function StandardsWorkspace() {
       {openStandard === "ISO 50001" ? <Iso50001ExportWorkspace /> : null}
       {openStandard === "ISO 9-20-27" ? <Iso902027ExportWorkspace /> : null}
       {openStandard === "ISO 9-14-45" ? <Iso91445ExportWorkspace /> : null}
+      {openStandard === "ISO 9001-14001-45001" ? <Iso90011400145001ExportWorkspace /> : null}
       {openStandard === "ISO 9-14" ? <Iso914ExportWorkspace /> : null}
     </div> : null}
   </Section>;
@@ -104,6 +111,7 @@ function calculateMetrics(rows: DocumentMetricRow[]) {
   const integrated91445 = rows.filter((document) => document.standards?.includes("ISO 9001") && document.standards.includes("ISO 14001") && document.standards.includes("ISO 45001"));
   const approved91445 = integrated91445.filter((document) => document.status === "approved").length;
   result["ISO 9-14-45"] = { documents: integrated91445.length, approvedPercent: integrated91445.length ? Math.round((approved91445 / integrated91445.length) * 100) : 0 };
+  result["ISO 9001-14001-45001"] = { documents: integrated91445.length, approvedPercent: integrated91445.length ? Math.round((approved91445 / integrated91445.length) * 100) : 0 };
   const integrated914 = rows.filter((document) => document.standards?.includes("ISO 9001") && document.standards.includes("ISO 14001"));
   const approved914 = integrated914.filter((document) => document.status === "approved").length;
   result["ISO 9-14"] = { documents: integrated914.length, approvedPercent: integrated914.length ? Math.round((approved914 / integrated914.length) * 100) : 0 };

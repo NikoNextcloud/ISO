@@ -18,6 +18,8 @@ export type IsoExportRequest = {
   scope?: string;
   effectiveDate?: string;
   version?: string;
+  teamMember1?: string;
+  teamMember2?: string;
   logoPngDataUrl?: string;
   aiVisuals?: Array<{
     title?: string;
@@ -41,6 +43,8 @@ type NormalizedExportData = {
   scope: string;
   effectiveDate: string;
   version: string;
+  teamMember1: string;
+  teamMember2: string;
   logoPngDataUrl: string;
   aiVisuals: Array<{
     title: string;
@@ -51,9 +55,9 @@ type NormalizedExportData = {
 };
 
 export type IsoExportConfig = {
-  code: "ISO 9001" | "ISO 14001" | "ISO 27001" | "ISO 45001" | "ISO 50001" | "ISO 9-20-27" | "ISO 9-14-45" | "ISO 9-14";
+  code: "ISO 9001" | "ISO 14001" | "ISO 27001" | "ISO 45001" | "ISO 50001" | "ISO 9-20-27" | "ISO 9-14-45" | "ISO 9-14" | "ISO 9001-14001-45001";
   edition: string;
-  templateDirectory: "iso9001" | "iso14001" | "iso27001" | "iso45001" | "iso50001" | "iso902027" | "iso91445" | "iso914";
+  templateDirectory: "iso9001" | "iso14001" | "iso27001" | "iso45001" | "iso50001" | "iso902027" | "iso91445" | "iso914" | "iso90011400145001";
   logoMode: WordLogoReplacement["mode"];
   logoSourceHashes?: string[];
   pathCompanyNames?: string[];
@@ -102,7 +106,7 @@ export const iso9001ExportConfig: IsoExportConfig = {
     ];
     result.push(
       ...replacementsWhen(data.manager, (manager) => [
-        ["ТОДОР ТОДОРОВ", manager.toLocaleUpperCase("bg")], ["Тодор Тодоров", manager]
+        ["ТОДОР ТОДОРОВ", manager.toLocaleUpperCase("bg")], ["Тодор Тодоров", manager], ["Боян Янев", manager]
       ]),
       ...replacementsWhen(data.address, (address) => [["гр. Ямбол", address]]),
       ...replacementsWhen(data.scope, (scope) => [
@@ -145,9 +149,14 @@ export const iso50001ExportConfig: IsoExportConfig = {
       ...replacementsWhen(data.manager, (manager) => [
         ["ТЕОДОР ЕВГЕНИЕВ СЕРАФИМОВ", manager.toLocaleUpperCase("bg")],
         ["Теодор Евгениев Серафимов", manager], ["Теодор Серафимов", manager],
-        ["Тодор Серафимов", manager], ["Борислав Тачев", manager]
+        ["Тодор Серафимов", manager], ["Борислав Тачев", manager], ["Боян Янев", manager]
       ]),
-      ...replacementsWhen(data.representative, (representative) => [["Невена Кръстева", representative]]),
+      ...replacementsWhen(data.representative, (representative) => [
+        ["Невена Кръстева", representative], ["Емил Ръжчев", representative], ["Емил Ръжев", representative]
+      ]),
+      ...replacementsWhen(data.teamMember1, (member) => [["Елена Ставрева", member]]),
+      ...replacementsWhen(data.teamMember2, (member) => [["Константин Цеков", member]]),
+      ...replacementsWhen(data.uic, (uic) => [["206853231", uic]]),
       ...replacementsWhen(data.activity, (activity) => [
         ["Последните няколко години предприятието насочва все повече дейността си към предоставяне на строителни услуги, в областта на жилищно и нежилищно строителство на сгради в региона на София. Компанията разполага с набор от транспортни средства и техника за извършване на дейностите в обхвата на сертификация.", `${data.companyName} извършва основна дейност: ${activity}.`]
       ]),
@@ -256,7 +265,12 @@ export const iso45001ExportConfig: IsoExportConfig = {
     ...replacementsWhen(data.manager, (manager) => [
       ["АДЕЛИЯ ТОМОВА ТОДОРОВА", manager.toLocaleUpperCase("bg")], ["Аделия Томова Тодорова", manager]
     ]),
-    ...replacementsWhen(data.address, (address) => [["гр. Плевен", address]]),
+    ...replacementsWhen(data.address, (address) => [
+      ["гр. Плевен, п.к. 5800, ул. БОРИС ШИВАЧЕВ № 47, ет. 2", address],
+      ["гр. Плевен", address]
+    ]),
+    ...replacementsWhen(data.email, (email) => [["smp_pleven@abv.bg", email]]),
+    ...replacementsWhen(data.phone, (phone) => [["0896791347", phone]]),
     ...replacementsWhen(data.effectiveDate, (date) => [
       ["12 януари 2026 г.", formatLongDate(date)], ["12 януари 2026 г", formatLongDate(date)],
       ["12.01.2026 г.", formatDate(date)], ["12.01.2026г.", formatDate(date)],
@@ -289,7 +303,8 @@ export const iso902027ExportConfig: IsoExportConfig = {
     "d658105eb1c9bcb13738d432ba206e3d9ee3a3c0b2977f54ec60280ca97c45b6",
     "f08b6e5ad452ec46a0c0b252bcc70c76c7570b51e37d8232835564736d8c1937",
     "3811f4bfeda135cf340392bc4ccd321266d6e304a9b697d117dcb0470256a33f",
-    "9c76aabdeb4dd80225f9a44e8c48e45dd587c6eb5f783a79a9d3855262d17066"
+    "9c76aabdeb4dd80225f9a44e8c48e45dd587c6eb5f783a79a9d3855262d17066",
+    "9e769ee87da43bc3bbc76271879b3b24697f02156124a79d033f85205da29366"
   ],
   pathCompanyNames: [
     "ST Al. Atanassov", "Atanassov 24-08-2020", "Atanassov 21-08-2020",
@@ -373,6 +388,80 @@ export const iso91445ExportConfig: IsoExportConfig = {
   }
 };
 
+export const iso90011400145001ExportConfig: IsoExportConfig = {
+  code: "ISO 9001-14001-45001",
+  edition: "ISO 9001:2015 + ISO 14001:2015 + ISO 45001:2018",
+  templateDirectory: "iso90011400145001",
+  logoMode: "matching-images",
+  logoSourceHashes: ["726c7493f4198568da2325458f5ec6ff310609243f5d4c47e8721e2ecad05755"],
+  pathCompanyNames: [
+    "ЕКОБУЛ ПАРТНЕР ООД",
+    "ЕКОБУЛ ПАРТНЕР",
+    "БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ ООД",
+    "БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ"
+  ],
+  replacements: (data) => {
+    const companyVariants = [
+      "\"ЕКОБУЛ ПАРТНЕР\" ООД",
+      "\"\"ЕКОБУЛ ПАРТНЕР\" ООД",
+      "„ЕКОБУЛ ПАРТНЕР“ ООД",
+      "„ ЕКОБУЛ ПАРТНЕР“ ООД",
+      "ЕКОБУЛ ПАРТНЕР ООД",
+      "\"БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ\" ООД",
+      "„БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ“ ООД",
+      "БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ ООД",
+      "ЕКОБУЛ ПАРТНЕР",
+      "БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ"
+    ];
+    return [
+      ...companyVariants.map((variant) => [variant, data.companyName] as [string, string]),
+      ...replacementsWhen(data.manager, (manager) => [
+        ["Иван Георгиев", manager],
+        ["ИВАН ГЕОРГИЕВ", manager.toLocaleUpperCase("bg")]
+      ]),
+      ...replacementsWhen(data.uic, (uic) => [["206395182", uic]]),
+      ...replacementsWhen(data.address, (address) => [
+        ["гр. Пазарджик, област Пазарджик, община Пазарджик ул Найчо Цанов №11", address],
+        ["гр. Пазарджик, област Пазарджик, община Пазарджик, ул. Найчо Цанов №11", address],
+        ["гр. Пазарджик", address]
+      ]),
+      ...replacementsWhen(data.email, (email) => [["office@ecobul.eu", email]]),
+      ...replacementsWhen(data.phone, (phone) => [["0897550025", phone]]),
+      ...replacementsWhen(data.activity, (activity) => [
+        ["извършва дейности по третиране на отпадъци", `извършва основна дейност: ${activity}`]
+      ]),
+      ...replacementsWhen(data.effectiveDate, (date) => {
+        const formatted = formatDate(date);
+        return [
+          ["27.01.2022 г.", `${formatted} г.`],
+          ["27.01.2022 г", `${formatted} г.`],
+          ["27.01.2022", formatted],
+          ["20.01.2022 г.", `${formatted} г.`],
+          ["20.01.2022", formatted],
+          ["28.01.2022 г.", `${formatted} г.`],
+          ["28.01.2022г.", `${formatted} г.`],
+          ["28.01.2022", formatted],
+          ["20.12.2021 г.", `${formatted} г.`],
+          ["20.12.2021", formatted],
+          ["27.01.2021 г.", `${formatted} г.`],
+          ["27.01.2021", formatted],
+          ["25.10.2021г.", `${formatted} г.`],
+          ["25.10.2021", formatted],
+          ["03.07.2021г.", `${formatted} г.`],
+          ["03.07.2021", formatted]
+        ];
+      }),
+      ...replacementsWhen(data.version, (version) => [
+        ["Версия: 01", `Версия: ${version}`],
+        ["Версия 01", `Версия ${version}`],
+        ["версия 01", `версия ${version}`],
+        ["Ревизия: 01", `Ревизия: ${version}`],
+        ["Ревизия 01", `Ревизия ${version}`]
+      ])
+    ];
+  }
+};
+
 export const iso914ExportConfig: IsoExportConfig = {
   code: "ISO 9-14",
   edition: "ISO 9001:2015 + ISO 14001:2015",
@@ -405,7 +494,8 @@ export const iso914ExportConfig: IsoExportConfig = {
 export function getIsoExportConfig(code: string) {
   return [
     iso9001ExportConfig, iso14001ExportConfig, iso27001ExportConfig, iso45001ExportConfig,
-    iso50001ExportConfig, iso902027ExportConfig, iso91445ExportConfig, iso914ExportConfig
+    iso50001ExportConfig, iso902027ExportConfig, iso91445ExportConfig,
+    iso90011400145001ExportConfig, iso914ExportConfig
   ].find((config) => config.code === code);
 }
 
@@ -558,6 +648,7 @@ function createExportReport(config: IsoExportConfig, data: NormalizedExportData,
   const appliedFields = [
     ["Име на фирмата", data.companyName], ["ЕИК", data.uic], ["Адрес", data.address], ["Управител", data.manager],
     ["Представител", data.representative], ["Лице за контакт", data.contactName], ["Имейл", data.email], ["Телефон", data.phone],
+    ["Член на енергийния екип 1", data.teamMember1], ["Член на енергийния екип 2", data.teamMember2],
     ["Брой служители", data.employees === undefined ? "" : String(data.employees)], ["Дейност", data.activity], ["Обхват", data.scope],
     ["Дата", data.effectiveDate], ["Версия", data.version]
   ].filter((entry) => entry[1]).map((entry) => entry[0]);
@@ -588,6 +679,7 @@ function normalizeRequest(body: IsoExportRequest): NormalizedExportData {
     contactName: optionalText(body.contactName), email: optionalText(body.email, 200), phone: optionalText(body.phone, 80),
     employees: optionalNumber(body.employees), activity: optionalText(body.activity, 1000), scope: optionalText(body.scope, 1500),
     effectiveDate: optionalText(body.effectiveDate, 20), version: optionalText(body.version, 20),
+    teamMember1: optionalText(body.teamMember1), teamMember2: optionalText(body.teamMember2),
     logoPngDataUrl: optionalText(body.logoPngDataUrl, 5_800_000),
     aiVisuals: normalizeAiVisuals(body.aiVisuals)
   };
@@ -600,7 +692,7 @@ function baseReplacements(data: NormalizedExportData): Array<[string, string]> {
     ["{{REPRESENTATIVE}}", data.representative], ["{{CONTACT_NAME}}", data.contactName],
     ["{{EMAIL}}", data.email], ["{{PHONE}}", data.phone], ["{{ACTIVITY}}", data.activity],
     ["{{SCOPE}}", data.scope], ["{{EFFECTIVE_DATE}}", data.effectiveDate ? formatDate(data.effectiveDate) : ""],
-    ["{{VERSION}}", data.version]
+    ["{{VERSION}}", data.version], ["{{TEAM_MEMBER_1}}", data.teamMember1], ["{{TEAM_MEMBER_2}}", data.teamMember2]
   ];
   optionalValues.forEach(([placeholder, value]) => { if (value) result.push([placeholder, value]); });
   if (data.employees !== undefined) result.push(["{{EMPLOYEES}}", String(data.employees)]);

@@ -92,7 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="mt-auto rounded-lg border border-slate-200 bg-[#f8fafc] p-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-[#111827]"><Sparkles className="h-4 w-4 text-teal-600" />ISO работно пространство</div>
-          <p className="mt-2 text-xs leading-5 text-slate-500">8 системи · частен фирмен архив</p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">9 системи · частен фирмен архив</p>
         </div>
       </aside>
 

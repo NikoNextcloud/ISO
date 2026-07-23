@@ -302,7 +302,7 @@ export function replaceSpreadsheetTextWithStats(xlsx: Buffer, replacements: Arra
         if (!result.changed) break;
         textReplacements += 1;
       }
-      const attributeResult = replaceSpreadsheetAttributeValuesWithCount(xml, source, replacement);
+      const attributeResult = replaceSpreadsheetVisibleAttributesWithCount(xml, entry.name, source, replacement);
       xml = attributeResult.xml;
       textReplacements += attributeResult.count;
     }
@@ -357,13 +357,16 @@ function replaceOnceAcrossSpreadsheetTextNodes(xml: string, source: string, repl
   return { xml: output + xml.slice(cursor), changed: true };
 }
 
-function replaceSpreadsheetAttributeValuesWithCount(xml: string, source: string, replacement: string) {
+function replaceSpreadsheetVisibleAttributesWithCount(xml: string, entryName: string, source: string, replacement: string) {
+  if (entryName !== "xl/workbook.xml") return { xml, count: 0 };
   let count = 0;
-  const result = xml.replace(/(\s[\w:.-]+=")([^"]*)(")/g, (match, prefix: string, value: string, suffix: string) => {
-    const decoded = decodeXml(value);
-    if (!decoded.includes(source)) return match;
-    count += countOccurrences(decoded, source);
-    return `${prefix}${encodeXml(decoded.replaceAll(source, replacement))}${suffix}`;
+  const result = xml.replace(/<sheet\b[^>]*>/gi, (sheetTag) => {
+    return sheetTag.replace(/(\sname=")([^"]*)(")/i, (match, prefix: string, value: string, suffix: string) => {
+      const decoded = decodeXml(value);
+      if (!decoded.includes(source)) return match;
+      count += countOccurrences(decoded, source);
+      return `${prefix}${encodeXml(decoded.replaceAll(source, replacement))}${suffix}`;
+    });
   });
   return { xml: result, count };
 }

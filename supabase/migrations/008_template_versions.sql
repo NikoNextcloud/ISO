@@ -11,7 +11,7 @@ create table if not exists public.template_versions (
   notes text,
   is_active boolean not null default false,
   created_at timestamptz not null default now(),
-  check (standard in ('ISO 9001', 'ISO 14001', 'ISO 45001', 'ISO 27001', 'ISO 50001', 'ISO 9-20-27', 'ISO 9-14-45', 'ISO 9-14'))
+  check (standard in ('ISO 9001', 'ISO 14001', 'ISO 45001', 'ISO 27001', 'ISO 50001', 'ISO 9-20-27', 'ISO 9-14-45', 'ISO 9-14', 'ISO 9001-14001-45001'))
 );
 
 create unique index if not exists template_versions_one_active_per_standard

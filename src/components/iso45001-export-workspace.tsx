@@ -13,6 +13,8 @@ export function Iso45001ExportWorkspace() {
       { key: "companyName", required: true, hint: "заглавия, папки, колонтитули" },
       { key: "address", required: true, hint: "гр. Плевен" },
       { key: "manager", required: true, hint: "Аделия Томова Тодорова" },
+      { key: "email", hint: "smp_pleven@abv.bg" },
+      { key: "phone", hint: "0896791347" },
       { key: "effectiveDate", required: true },
       { key: "version", required: true },
       { key: "activity", hint: "основна дейност на фирмата" }

@@ -1,4 +1,4 @@
-export type IsoStandardCode = "ISO 9001" | "ISO 14001" | "ISO 45001" | "ISO 27001" | "ISO 50001" | "ISO 9-20-27" | "ISO 9-14-45" | "ISO 9-14";
+export type IsoStandardCode = "ISO 9001" | "ISO 14001" | "ISO 45001" | "ISO 27001" | "ISO 50001" | "ISO 9-20-27" | "ISO 9-14-45" | "ISO 9-14" | "ISO 9001-14001-45001";
 
 export type OrganizationStatus = "draft" | "implementation" | "ready" | "certified" | "attention";
 

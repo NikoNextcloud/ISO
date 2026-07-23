@@ -111,7 +111,7 @@ export function AiVisualStudio({
         headers: await authHeaders(true),
         body: JSON.stringify({ type, prompt, companyName, standard, accent, layout })
       });
-      const payload = await response.json().catch(() => null) as { dataUrl?: string; model?: string; error?: string } | null;
+      const payload = await response.json().catch(() => null) as { dataUrl?: string; model?: string; cached?: boolean; error?: string } | null;
       if (!response.ok || !payload?.dataUrl) throw new Error(payload?.error ?? "Cloudflare AI не върна изображение.");
       const pngDataUrl = await convertToPng(payload.dataUrl, {
         title: title.trim() || "AI визуализация",
@@ -131,7 +131,7 @@ export function AiVisualStudio({
         ? [...value.filter((item) => item.targetHash !== targetHash), visual]
         : [...value, visual];
       onChange(next.slice(-4));
-      setStatus((current) => current ? { ...current, active: true, message: "Cloudflare AI генерира изображението успешно." } : current);
+      setStatus((current) => current ? { ...current, active: true, message: payload.cached ? "Изображението е заредено от кеша без нов AI разход." : "Cloudflare AI генерира изображението успешно." } : current);
     } catch (error) {
       const message = error instanceof Error ? error.message : "AI визуализацията не беше генерирана.";
       setGenerationError(message);

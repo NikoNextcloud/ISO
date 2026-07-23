@@ -11,8 +11,11 @@ export function Iso50001ExportWorkspace() {
     contents: ["Системен наръчник за енергийно управление", "5 процедури и свързаните формуляри", "Енергийни цели, мониторинг, одити, рискове и записи"],
     fields: [
       { key: "companyName", required: true, hint: "заглавия, папки, колонтитули" },
+      { key: "uic", hint: "заменя ЕИК 206853231" },
       { key: "manager", required: true, hint: "Теодор Серафимов" },
-      { key: "representative", hint: "Невена Кръстева" },
+      { key: "representative", hint: "Невена Кръстева / Емил Ръжев" },
+      { key: "teamMember1", hint: "Елена Ставрева" },
+      { key: "teamMember2", hint: "Константин Цеков" },
       { key: "effectiveDate", required: true },
       { key: "version", required: true },
       { key: "activity", hint: "основна дейност на фирмата" }

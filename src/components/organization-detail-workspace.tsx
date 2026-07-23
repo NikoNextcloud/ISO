@@ -15,7 +15,10 @@ const LEGACY_ORGANIZATIONS_KEY = "ims-ai-organizations-v1";
 const CERTIFICATES_KEY = "iso-certification-certificates-v1";
 const HISTORY_KEY = "iso-certification-history-v1";
 const DOCUMENTS_KEY = "iso-certification-documents-v1";
-const standardOptions: IsoStandardCode[] = ["ISO 9001", "ISO 14001", "ISO 45001", "ISO 27001", "ISO 50001"];
+const standardOptions: IsoStandardCode[] = [
+  "ISO 9001", "ISO 14001", "ISO 45001", "ISO 27001", "ISO 50001",
+  "ISO 9-20-27", "ISO 9-14-45", "ISO 9001-14001-45001", "ISO 9-14"
+];
 
 const emptyCertificate = {
   standard: "ISO 9001" as IsoStandardCode,

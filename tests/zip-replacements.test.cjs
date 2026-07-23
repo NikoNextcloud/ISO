@@ -45,7 +45,7 @@ test("XLSX replaces split cells, workbook attributes, title and matching logo", 
   const archive = zip.writeZip([
     { name: "[Content_Types].xml", data: contentTypes },
     { name: "xl/sharedStrings.xml", data: Buffer.from('<sst><si><r><t>Стар</t></r><r><t> Управител</t></r></si><si><t>{{ADDRESS}}</t></si></sst>') },
-    { name: "xl/workbook.xml", data: Buffer.from('<workbook><definedName name="Стара Фирма">A1</definedName></workbook>') },
+    { name: "xl/workbook.xml", data: Buffer.from('<workbook internalId="Стара Фирма"><sheets><sheet name="Стара Фирма" sheetId="1"/></sheets></workbook>') },
     { name: "docProps/core.xml", data: Buffer.from('<cp:coreProperties xmlns:cp="cp" xmlns:dc="dc"><dc:title>Стара Фирма</dc:title></cp:coreProperties>') },
     { name: "xl/media/logo.png", data: oldLogo }
   ]);
@@ -53,6 +53,7 @@ test("XLSX replaces split cells, workbook attributes, title and matching logo", 
   const entries = new Map(zip.readZip(result.buffer).map((entry) => [entry.name, entry.data]));
   assert.match(entries.get("xl/sharedStrings.xml").toString("utf8"), /Нов Управител/);
   assert.match(entries.get("xl/workbook.xml").toString("utf8"), /name="Нова Фирма"/);
+  assert.match(entries.get("xl/workbook.xml").toString("utf8"), /internalId="Стара Фирма"/, "служебните XML атрибути не трябва да се променят");
   assert.match(entries.get("docProps/core.xml").toString("utf8"), /Нова Фирма/);
   assert.match(entries.get("xl/sharedStrings.xml").toString("utf8"), /\{\{ADDRESS\}\}/, "неподадено поле трябва да остане непроменено");
   assert.deepEqual(entries.get("xl/media/logo.png"), newLogo);

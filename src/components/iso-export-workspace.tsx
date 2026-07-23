@@ -11,7 +11,7 @@ import { AiVisualStudio, type AiGeneratedVisual, type AiVisualTarget } from "@/c
 export type ExportFieldKey =
   | "companyName" | "uic" | "address" | "manager" | "representative"
   | "contactName" | "email" | "phone" | "employees" | "activity"
-  | "scope" | "effectiveDate" | "version";
+  | "scope" | "effectiveDate" | "version" | "teamMember1" | "teamMember2";
 
 export type ExportFieldSpec = { key: ExportFieldKey; required?: boolean; hint?: string };
 
@@ -21,6 +21,8 @@ const FIELD_META: Record<ExportFieldKey, { label: string; type: "text" | "email"
   address: { label: "Адрес", type: "text" },
   manager: { label: "Управител", type: "text" },
   representative: { label: "Представител на ръководството", type: "text" },
+  teamMember1: { label: "Член на енергийния екип 1", type: "text" },
+  teamMember2: { label: "Член на енергийния екип 2", type: "text" },
   contactName: { label: "Лице за контакт", type: "text" },
   email: { label: "Имейл", type: "email" },
   phone: { label: "Телефон", type: "text" },
@@ -32,7 +34,7 @@ const FIELD_META: Record<ExportFieldKey, { label: string; type: "text" | "email"
 };
 
 export type IsoExportWorkspaceConfig = {
-  code: "ISO 9001" | "ISO 14001" | "ISO 27001" | "ISO 45001" | "ISO 50001" | "ISO 9-20-27" | "ISO 9-14-45" | "ISO 9-14";
+  code: "ISO 9001" | "ISO 14001" | "ISO 27001" | "ISO 45001" | "ISO 50001" | "ISO 9-20-27" | "ISO 9-14-45" | "ISO 9-14" | "ISO 9001-14001-45001";
   edition: string;
   apiPath: string;
   templateCount: number;
@@ -49,7 +51,7 @@ export type IsoExportWorkspaceConfig = {
 type ExportForm = {
   companyName: string; uic: string; address: string; manager: string; representative: string;
   contactName: string; email: string; phone: string; employees: number | ""; activity: string;
-  scope: string; effectiveDate: string; version: string;
+  scope: string; effectiveDate: string; version: string; teamMember1: string; teamMember2: string;
 };
 
 type OrganizationRow = {
@@ -68,7 +70,7 @@ type GeneratedArchive = { url: string; filename: string; blob: Blob };
 
 const emptyForm: ExportForm = {
   companyName: "", uic: "", address: "", manager: "", representative: "", contactName: "", email: "", phone: "",
-  employees: "", activity: "", scope: "", effectiveDate: "", version: ""
+  employees: "", activity: "", scope: "", effectiveDate: "", version: "", teamMember1: "", teamMember2: ""
 };
 
 export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfig }) {
@@ -125,7 +127,7 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
       companyName: organization.name, uic: organization.uic, address: organization.address ?? "", manager: organization.manager ?? "",
       representative: organization.representative ?? organization.manager ?? "", contactName: organization.contact_name ?? "",
       email: organization.contact_email ?? "", phone: organization.contact_phone ?? "", employees: organization.employees_count ?? "",
-      activity: organization.activity ?? "", scope: organization.activity ?? ""
+      activity: organization.activity ?? "", scope: organization.activity ?? "", teamMember1: "", teamMember2: ""
     }));
   }
 
