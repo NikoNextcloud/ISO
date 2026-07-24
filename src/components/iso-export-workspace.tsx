@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { AlertTriangle, Archive, CheckCircle2, Download, Eye, FileArchive, FolderTree, ImagePlus, Info, Loader2, ShieldCheck, Sparkles, X } from "lucide-react";
+import { CopyExample } from "@/components/copy-example";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { storageErrorMessage } from "@/lib/storage-errors";
 import type { Organization, OrganizationHistoryEntry } from "@/lib/types";
@@ -57,6 +58,35 @@ const FIELD_META: Record<ExportFieldKey, { label: string; type: "text" | "email"
   managementReviewDate: { label: "Преглед от ръководството", type: "date" },
   previousYear: { label: "Предходна година", type: "number" },
   currentYear: { label: "Настояща година", type: "number" }
+};
+
+const FIELD_EXAMPLES: Partial<Record<ExportFieldKey, string>> = {
+  companyName: "ЕКОБУЛ ПАРТНЕР ООД",
+  uic: "206395182",
+  legalForm: "ООД",
+  address: "гр. Пазарджик, ул. Найчо Цанов №11",
+  city: "Пазарджик",
+  manager: "Николай Вилинов Острев",
+  representative: "Мария Иванова Петрова",
+  preparedBy: "Координатор СУК или Отговорник поддръжка",
+  contactName: "Иван Петров Иванов",
+  email: "office@company.bg",
+  phone: "0897550025",
+  employees: "35",
+  activity: "Производство, складиране, транспорт и продажба на готова продукция",
+  physicalScope: "Производствена площадка, цех, склад, административен офис и транспорт",
+  organizationContext: "Пазар, клиенти, конкуренти, законови изисквания, технологии, персонал и ресурси",
+  processesDescription: "Управление, договаряне, доставки, производство, контрол, складиране и експедиция",
+  productsServices: "Готова продукция, транспорт, доставка и обслужване на клиенти",
+  environmentalAspects: "Прах, шум, отпадъци, емисии, масла, филтри, опаковки и потребление на ресурси",
+  occupationalRisks: "Машини, движещи се части, прах, шум, пожар, транспорт и товаро-разтоварни дейности",
+  externalParties: "Клиенти, доставчици, контролни органи, външни изпълнители и местна общност",
+  wasteManagement: "Разделно събиране, обозначено съхранение и предаване на правоспособни лица",
+  postDeliveryActivities: "Експедиция, доставка, обратна връзка, рекламации и коригиращи действия",
+  trainingDetails: "Вътрешно обучение по приложимия ISO стандарт, проведено от представителя на ръководството",
+  version: "1",
+  teamMember1: "Иван Петров Иванов",
+  teamMember2: "Мария Георгиева Иванова"
 };
 
 export type IsoExportWorkspaceConfig = {
@@ -373,18 +403,19 @@ export function IsoExportWorkspace({ config }: { config: IsoExportWorkspaceConfi
   function renderField(spec: ExportFieldSpec) {
     const meta = FIELD_META[spec.key];
     const fullWidth = meta.fullWidth ? " sm:col-span-2" : "";
+    const example = spec.key === "scope" ? config.scopePlaceholder : FIELD_EXAMPLES[spec.key];
     const labelNode = <span>{fieldLabel(spec.key)}{spec.required ? <span className="text-red-600"> *</span> : null}{spec.hint ? <span className="ml-1 text-xs font-normal text-slate-400">· {spec.hint}</span> : null}</span>;
     const baseInput = "focus-ring h-10 rounded border border-line bg-white px-3 text-sm font-normal outline-none";
     if (meta.type === "textarea") {
-      return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<textarea className="focus-ring min-h-24 rounded border border-line bg-white p-3 text-sm font-normal outline-none" placeholder={spec.key === "scope" ? config.scopePlaceholder : undefined} required={spec.required} value={form[spec.key] as string} onChange={(event) => setForm({ ...form, [spec.key]: event.target.value })} /></label>;
+      return <div className={`grid gap-1.5${fullWidth}`} key={spec.key}><label className="grid gap-1.5 text-sm font-medium text-ink">{labelNode}<textarea className="focus-ring min-h-24 rounded border border-line bg-white p-3 text-sm font-normal outline-none" required={spec.required} value={form[spec.key] as string} onChange={(event) => setForm({ ...form, [spec.key]: event.target.value })} /></label><CopyExample text={example} /></div>;
     }
     if (spec.key === "designDevelopment") {
       return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<select className={baseInput} required={spec.required} value={form.designDevelopment} onChange={(event) => setForm({ ...form, designDevelopment: event.target.value })}><option value="">Изберете приложимост</option><option value="not_applicable">Не е приложимо</option><option value="applicable">Приложимо е</option></select></label>;
     }
     if (spec.key === "employees") {
-      return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<input className={baseInput} min="0" required={spec.required} type="number" value={form.employees} onChange={(event) => setForm({ ...form, employees: event.target.value === "" ? "" : Number(event.target.value) })} /></label>;
+      return <div className={`grid gap-1.5${fullWidth}`} key={spec.key}><label className="grid gap-1.5 text-sm font-medium text-ink">{labelNode}<input className={baseInput} min="0" required={spec.required} type="number" value={form.employees} onChange={(event) => setForm({ ...form, employees: event.target.value === "" ? "" : Number(event.target.value) })} /></label><CopyExample text={example} /></div>;
     }
-    return <label className={`grid gap-1.5 text-sm font-medium text-ink${fullWidth}`} key={spec.key}>{labelNode}<input className={baseInput} required={spec.required} type={meta.type} value={form[spec.key] as string} onChange={(event) => setForm({ ...form, [spec.key]: event.target.value })} /></label>;
+    return <div className={`grid gap-1.5${fullWidth}`} key={spec.key}><label className="grid gap-1.5 text-sm font-medium text-ink">{labelNode}<input className={baseInput} required={spec.required} type={meta.type} value={form[spec.key] as string} onChange={(event) => setForm({ ...form, [spec.key]: event.target.value })} /></label><CopyExample text={example} /></div>;
   }
 
   return <div id={`${id}-system`}><div className="mb-4"><h3 className="text-base font-semibold text-ink">{config.title}</h3><p className="mt-1 text-sm text-slate-500">{config.description}</p></div>

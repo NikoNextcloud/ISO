@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { Award, BarChart3, Building2, Cloud, Edit3, FileText, FolderOpen, Gauge, History, Loader2, LogIn, LogOut, Plus, Save, Search, TrendingUp, Trash2, X } from "lucide-react";
+import { CopyExample } from "@/components/copy-example";
 import { Section, StandardPills, StatCard, StatusBadge } from "@/components/ui";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { IsoStandardCode, Organization, OrganizationCertificate, OrganizationHistoryEntry, OrganizationStatus } from "@/lib/types";
@@ -389,15 +390,15 @@ export function OrganizationWorkspace({ view }: { view: "dashboard" | "organizat
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white px-5 py-4"><div><h2 className="text-base font-semibold text-ink">{organizations.some((item) => item.id === editing.id) ? "Редактиране на фирма" : "Нова фирма"}</h2><p className="text-xs text-slate-500">Полетата със звездичка са задължителни.</p></div><button aria-label="Затвори" className="focus-ring grid h-9 w-9 place-items-center rounded hover:bg-panel" onClick={() => setEditing(null)} type="button"><X className="h-5 w-5" /></button></div>
         <div className="grid gap-4 p-5 sm:grid-cols-2">
           <FormSectionTitle title="Основни данни за фирмата" />
-          <Field label="Име на фирмата *"><input autoFocus placeholder="ЕКОБУЛ ПАРТНЕР ООД" required value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
-          <Field label="ЕИК *"><input inputMode="numeric" placeholder="206395182" required value={editing.uic} onChange={(e) => setEditing({ ...editing, uic: e.target.value })} /></Field>
-          <Field label="Правна форма"><input placeholder="ООД" value={editing.legalForm ?? ""} onChange={(e) => setEditing({ ...editing, legalForm: e.target.value })} /></Field>
-          <Field label={`Град${requiresIntegratedContext ? " *" : ""}`}><input placeholder="Пазарджик" value={editing.city ?? ""} onChange={(e) => setEditing({ ...editing, city: e.target.value })} /></Field>
-          <Field label={`Седалище/адрес${requiresIntegratedContext ? " *" : ""}`}><input placeholder="гр. Пазарджик, ул. Найчо Цанов №11" value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} /></Field>
+          <Field example="ЕКОБУЛ ПАРТНЕР ООД" label="Име на фирмата *"><input autoFocus required value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
+          <Field example="206395182" label="ЕИК *"><input inputMode="numeric" required value={editing.uic} onChange={(e) => setEditing({ ...editing, uic: e.target.value })} /></Field>
+          <Field example="ООД" label="Правна форма"><input value={editing.legalForm ?? ""} onChange={(e) => setEditing({ ...editing, legalForm: e.target.value })} /></Field>
+          <Field example="Пазарджик" label={`Град${requiresIntegratedContext ? " *" : ""}`}><input value={editing.city ?? ""} onChange={(e) => setEditing({ ...editing, city: e.target.value })} /></Field>
+          <Field example="гр. Пазарджик, ул. Найчо Цанов №11" label={`Седалище/адрес${requiresIntegratedContext ? " *" : ""}`}><input value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} /></Field>
           <Field label={`Дата на създаване на фирмата${requiresIntegratedContext ? " *" : ""}`}><input type="date" value={editing.foundedAt ?? ""} onChange={(e) => setEditing({ ...editing, foundedAt: e.target.value })} /></Field>
-          <Field label="Имейл"><input placeholder="office@ecobul.eu" type="email" value={editing.contactEmail} onChange={(e) => setEditing({ ...editing, contactEmail: e.target.value })} /></Field>
-          <Field label="Телефон"><input placeholder="0897550025" value={editing.contactPhone ?? ""} onChange={(e) => setEditing({ ...editing, contactPhone: e.target.value })} /></Field>
-          <Field label={`Управител${requiresIntegratedContext ? " *" : ""}`}><input placeholder="Николай Вилинов Острев" value={editing.manager} onChange={(e) => setEditing({ ...editing, manager: e.target.value })} /></Field>
+          <Field example="office@ecobul.eu" label="Имейл"><input type="email" value={editing.contactEmail} onChange={(e) => setEditing({ ...editing, contactEmail: e.target.value })} /></Field>
+          <Field example="0897550025" label="Телефон"><input value={editing.contactPhone ?? ""} onChange={(e) => setEditing({ ...editing, contactPhone: e.target.value })} /></Field>
+          <Field example="Николай Вилинов Острев" label={`Управител${requiresIntegratedContext ? " *" : ""}`}><input value={editing.manager} onChange={(e) => setEditing({ ...editing, manager: e.target.value })} /></Field>
           <Field label={`Дата на системата${requiresIntegratedContext ? " *" : ""}`}><input type="date" value={editing.systemDate ?? ""} onChange={(e) => {
             const systemDate = e.target.value;
             setEditing({
@@ -422,11 +423,11 @@ export function OrganizationWorkspace({ view }: { view: "dashboard" | "organizat
           <TextAreaField label={`Управление на отпадъците${requiresIntegratedContext ? " *" : ""}`} placeholder="Как се събират, съхраняват, оползотворяват и предават отпадъците на правоспособни лица" value={editing.wasteManagement ?? ""} onChange={(value) => setEditing({ ...editing, wasteManagement: value })} />
           <Field label={`Проектиране и разработване${requiresIntegratedContext ? " *" : ""}`}><select value={editing.designDevelopment ?? ""} onChange={(e) => setEditing({ ...editing, designDevelopment: e.target.value as Organization["designDevelopment"] })}><option value="">Изберете приложимост</option><option value="not_applicable">Не е приложимо</option><option value="applicable">Приложимо е</option></select></Field>
           <TextAreaField label="Дейности след доставка" placeholder="Например: експедиция, доставка, обратна връзка, рекламации и коригиращи действия" value={editing.postDeliveryActivities ?? ""} onChange={(value) => setEditing({ ...editing, postDeliveryActivities: value })} />
-          <TextAreaField label="Обучения" placeholder="05.01.2022 г., обучител „Сириус Груп С“ ЕООД" value={editing.trainingDetails ?? ""} onChange={(value) => setEditing({ ...editing, trainingDetails: value })} />
+          <TextAreaField label="Обучения" placeholder="Вътрешно обучение по приложимия ISO стандарт, проведено от представителя на ръководството" value={editing.trainingDetails ?? ""} onChange={(value) => setEditing({ ...editing, trainingDetails: value })} />
           <Field label={`Вътрешен одит${requiresIntegratedContext ? " *" : ""}`}><input type="date" value={editing.internalAuditDate ?? ""} onChange={(e) => setEditing({ ...editing, internalAuditDate: e.target.value })} /></Field>
           <Field label={`Преглед от ръководството${requiresIntegratedContext ? " *" : ""}`}><input type="date" value={editing.managementReviewDate ?? ""} onChange={(e) => setEditing({ ...editing, managementReviewDate: e.target.value })} /></Field>
-          <Field label={`Предходна година${requiresIntegratedContext ? " *" : ""}`}><input inputMode="numeric" max="2200" min="1900" placeholder="2025" type="number" value={editing.previousYear ?? ""} onChange={(e) => setEditing({ ...editing, previousYear: e.target.value ? Number(e.target.value) : undefined })} /></Field>
-          <Field label={`Настояща година${requiresIntegratedContext ? " *" : ""}`}><input inputMode="numeric" max="2200" min="1900" placeholder="2026" type="number" value={editing.currentYear ?? ""} onChange={(e) => setEditing({ ...editing, currentYear: e.target.value ? Number(e.target.value) : undefined })} /></Field>
+          <Field example="2025" label={`Предходна година${requiresIntegratedContext ? " *" : ""}`}><input inputMode="numeric" max="2200" min="1900" type="number" value={editing.previousYear ?? ""} onChange={(e) => setEditing({ ...editing, previousYear: e.target.value ? Number(e.target.value) : undefined })} /></Field>
+          <Field example="2026" label={`Настояща година${requiresIntegratedContext ? " *" : ""}`}><input inputMode="numeric" max="2200" min="1900" type="number" value={editing.currentYear ?? ""} onChange={(e) => setEditing({ ...editing, currentYear: e.target.value ? Number(e.target.value) : undefined })} /></Field>
 
           <FormSectionTitle title="Допълнителни административни данни" />
           <Field label="Представител на ръководството"><input value={editing.representative ?? ""} onChange={(e) => setEditing({ ...editing, representative: e.target.value })} /></Field>
@@ -477,12 +478,12 @@ export function OrganizationWorkspace({ view }: { view: "dashboard" | "organizat
   </>;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactElement<{ className?: string }> }) {
-  return <label className="grid gap-1.5 text-sm font-medium text-ink">{label}{cloneElement(children, { className: `focus-ring h-10 w-full rounded border border-line bg-white px-3 text-sm font-normal outline-none ${children.props.className ?? ""}` })}</label>;
+function Field({ label, example, children }: { label: string; example?: string; children: React.ReactElement<{ className?: string }> }) {
+  return <div className="grid gap-1.5"><label className="grid gap-1.5 text-sm font-medium text-ink">{label}{cloneElement(children, { className: `focus-ring h-10 w-full rounded border border-line bg-white px-3 text-sm font-normal outline-none ${children.props.className ?? ""}` })}</label><CopyExample text={example} /></div>;
 }
 
 function TextAreaField({ label, placeholder, value, onChange }: { label: string; placeholder?: string; value: string; onChange: (value: string) => void }) {
-  return <label className="grid gap-1.5 text-sm font-medium text-ink sm:col-span-2">{label}<textarea className="focus-ring min-h-24 w-full rounded border border-line bg-white p-3 text-sm font-normal outline-none" placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+  return <div className="grid gap-1.5 sm:col-span-2"><label className="grid gap-1.5 text-sm font-medium text-ink">{label}<textarea className="focus-ring min-h-24 w-full rounded border border-line bg-white p-3 text-sm font-normal outline-none" value={value} onChange={(event) => onChange(event.target.value)} /></label><CopyExample text={placeholder} /></div>;
 }
 
 function FormSectionTitle({ title }: { title: string }) {
