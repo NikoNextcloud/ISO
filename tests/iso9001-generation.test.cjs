@@ -44,6 +44,7 @@ test("ISO 9001 generation removes foreign companies, sectors and obsolete period
     address: "гр. Батак, п.к. 4580, ул. Родопи № 3",
     city: "Батак",
     manager: "АНГЕЛ ПЕТРОВ КЛИМЕНТОВ",
+    preparedBy: "Отговорник поддръжка",
     foundedAt: "2009-05-25",
     phone: "0888 123 456",
     activity: "дърводобив и дървопреработване",
@@ -64,6 +65,7 @@ test("ISO 9001 generation removes foreign companies, sectors and obsolete period
     version: "1"
   }, generator.iso9001ExportConfig);
 
+  if (process.env.ISO9001_TEST_OUTPUT) fs.writeFileSync(process.env.ISO9001_TEST_OUTPUT, result.archive);
   const text = officeArchiveText(result.archive).toLocaleLowerCase("bg");
   const forbidden = [
     "артпласт", "деон-бг", "балканремонт инженеринг",
@@ -74,7 +76,10 @@ test("ISO 9001 generation removes foreign companies, sectors and obsolete period
     "продажби и магазини", "търговски екип по развитие",
     "следпродажбена поддръжка", "след сервизна поддръжка",
     "титанов диоксид", "вътреболничните инфекции",
-    "фирмата извършва търговски услуги", "за 2019 година", "за 2020 година"
+    "фирмата извършва търговски услуги", "за 2019 година", "за 2020 година",
+    "хранителните чували", "монтаж", "инсталация", "ръководител предоставяне на услуги",
+    "2020година", "актуален към 2022", "202 2 г.",
+    "интегрирана система", "документ ису", "по ису", "на ису", "за ису", "кису"
   ];
   const remaining = forbidden.filter((pattern) => text.includes(pattern));
   assert.deepEqual(remaining, []);
@@ -86,5 +91,34 @@ test("ISO 9001 generation removes foreign companies, sectors and obsolete period
   );
   assert.ok(result.report.changedFiles >= 25);
   assert.match(result.filename, /ISO-9001-ФОТЕКС ООД\.zip/);
-  if (process.env.ISO9001_TEST_OUTPUT) fs.writeFileSync(process.env.ISO9001_TEST_OUTPUT, result.archive);
+});
+
+test("ISO 9001 rejects clause 8.3 as applicable without a real design process", async () => {
+  await assert.rejects(
+    generator.createIsoSystemArchive({
+      companyName: "Тест ООД",
+      uic: "123456789",
+      address: "гр. София",
+      city: "София",
+      manager: "Иван Иванов",
+      foundedAt: "2020-01-01",
+      effectiveDate: "2026-01-01",
+      version: "1",
+      activity: "производство на дървен материал",
+      scope: "производство на дървен материал",
+      productsServices: "дървен материал",
+      physicalScope: "производствен цех",
+      organizationContext: "производствена организация",
+      processesDescription: "доставка, производство, контрол и експедиция",
+      externalParties: "клиенти и доставчици",
+      designDevelopment: "applicable",
+      postDeliveryActivities: "доставка и рекламации",
+      trainingDetails: "вътрешно обучение",
+      internalAuditDate: "2026-01-20",
+      managementReviewDate: "2026-01-25",
+      previousYear: 2025,
+      currentYear: 2026
+    }, generator.iso9001ExportConfig),
+    /Клауза 8\.3 е отбелязана като приложима/
+  );
 });
