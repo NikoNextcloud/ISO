@@ -22,6 +22,22 @@ export type OfficeReplacementStats = {
   changed: boolean;
 };
 
+export type WordBodyParagraph = {
+  text: string;
+  style?: "title" | "heading1" | "heading2" | "normal" | "bullet";
+};
+
+export type WordContentRewrite =
+  | { mode: "body"; paragraphs: WordBodyParagraph[] }
+  | { mode: "from-marker"; marker: string; paragraphs: WordBodyParagraph[]; occurrence?: "first" | "last" }
+  | {
+    mode: "between-markers";
+    startMarker: string;
+    endMarker: string;
+    paragraphs: WordBodyParagraph[];
+    occurrence?: "first" | "last";
+  };
+
 const CRC_TABLE = Array.from({ length: 256 }, (_, value) => {
   let crc = value;
   for (let bit = 0; bit < 8; bit += 1) crc = (crc & 1) ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
@@ -263,6 +279,80 @@ export function replaceWordTextWithStats(docx: Buffer, replacements: Array<[stri
 
 export function replaceWordText(docx: Buffer, replacements: Array<[string, string]>, logo?: WordLogoReplacement, imageReplacements: OfficeImageReplacement[] = []) {
   return replaceWordTextWithStats(docx, replacements, logo, imageReplacements).buffer;
+}
+
+export function rewriteWordDocumentContentWithStats(docx: Buffer, rewrite: WordContentRewrite) {
+  let changed = false;
+  const entries = readZip(docx).map((entry) => {
+    if (entry.name !== "word/document.xml") return entry;
+    const source = entry.data.toString("utf8");
+    const rewritten = rewriteWordDocumentXml(source, rewrite);
+    if (rewritten === source) return entry;
+    changed = true;
+    return { ...entry, data: Buffer.from(rewritten, "utf8") };
+  });
+  return {
+    buffer: changed ? writeZip(entries) : docx,
+    textReplacements: changed ? 1 : 0,
+    changed
+  };
+}
+
+function rewriteWordDocumentXml(xml: string, rewrite: WordContentRewrite) {
+  const bodyStart = xml.indexOf("<w:body");
+  if (bodyStart < 0) return xml;
+  const bodyContentStart = xml.indexOf(">", bodyStart) + 1;
+  const sectionStart = xml.lastIndexOf("<w:sectPr");
+  if (bodyContentStart <= 0 || sectionStart < bodyContentStart) return xml;
+
+  let start = bodyContentStart;
+  let end = sectionStart;
+  if (rewrite.mode !== "body") {
+    const paragraphs = wordParagraphRanges(xml, bodyContentStart, sectionStart);
+    const marker = rewrite.mode === "from-marker" ? rewrite.marker : rewrite.startMarker;
+    const candidates = paragraphs.filter((paragraph) => paragraph.text.includes(marker));
+    const selected = rewrite.occurrence === "last" ? candidates.at(-1) : candidates[0];
+    if (!selected || isInsideWordTable(xml, selected.start)) return xml;
+    start = selected.start;
+    if (rewrite.mode === "between-markers") {
+      const next = paragraphs.find((paragraph) => paragraph.start > start && paragraph.text.includes(rewrite.endMarker));
+      if (!next || isInsideWordTable(xml, next.start)) return xml;
+      end = next.start;
+    }
+  }
+
+  const content = rewrite.paragraphs
+    .filter((paragraph) => paragraph.text.trim())
+    .map(wordParagraphXml)
+    .join("");
+  return xml.slice(0, start) + content + xml.slice(end);
+}
+
+function wordParagraphRanges(xml: string, start: number, end: number) {
+  const ranges: Array<{ start: number; end: number; text: string }> = [];
+  const pattern = /<w:p\b[^>]*>[\s\S]*?<\/w:p>/gi;
+  pattern.lastIndex = start;
+  for (let match = pattern.exec(xml); match && match.index < end; match = pattern.exec(xml)) {
+    const values: string[] = [];
+    const textPattern = /<w:(?:t|delText|instrText)\b[^>]*>([\s\S]*?)<\/w:[^>]+>/gi;
+    for (let textMatch = textPattern.exec(match[0]); textMatch; textMatch = textPattern.exec(match[0])) {
+      values.push(decodeXml(textMatch[1]));
+    }
+    ranges.push({ start: match.index, end: match.index + match[0].length, text: values.join("") });
+  }
+  return ranges;
+}
+
+function isInsideWordTable(xml: string, position: number) {
+  return xml.lastIndexOf("<w:tbl", position) > xml.lastIndexOf("</w:tbl>", position);
+}
+
+function wordParagraphXml(paragraph: WordBodyParagraph) {
+  const style = paragraph.style ?? "normal";
+  const styleId = style === "title" ? "Title" : style === "heading1" ? "Heading1" : style === "heading2" ? "Heading2" : "";
+  const paragraphProperties = styleId ? `<w:pPr><w:pStyle w:val="${styleId}"/></w:pPr>` : "";
+  const prefix = style === "bullet" ? "• " : "";
+  return `<w:p>${paragraphProperties}<w:r><w:t xml:space="preserve">${encodeXml(prefix + paragraph.text)}</w:t></w:r></w:p>`;
 }
 
 export function replaceSpreadsheetTextWithStats(xlsx: Buffer, replacements: Array<[string, string]>, logo?: WordLogoReplacement, imageReplacements: OfficeImageReplacement[] = []): OfficeReplacementStats {

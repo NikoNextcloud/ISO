@@ -70,6 +70,46 @@ test("Office archive remains unchanged when no source value exists", () => {
   assert.equal(result.changed, false);
 });
 
+test("DOCX can rebuild a contaminated body and replace a section between markers", () => {
+  const document = [
+    '<w:document xmlns:w="w"><w:body>',
+    '<w:p><w:r><w:t>Стар финансов шаблон</w:t></w:r></w:p>',
+    '<w:p><w:r><w:t>РАЗДЕЛ 8.3.ПРОЕКТИРАНЕ И РАЗРАБОТВАНЕ</w:t></w:r></w:p>',
+    '<w:p><w:r><w:t>Чужд текст за сервиз и монтаж</w:t></w:r></w:p>',
+    '<w:p><w:r><w:t>РАЗДЕЛ 8.4.УПРАВЛЕНИЕ НА ПРОЦЕСИ</w:t></w:r></w:p>',
+    '<w:p><w:r><w:t>Текст след секцията</w:t></w:r></w:p>',
+    '<w:sectPr/></w:body></w:document>'
+  ].join("");
+  const archive = zip.writeZip([{ name: "word/document.xml", data: Buffer.from(document) }]);
+
+  const section = zip.rewriteWordDocumentContentWithStats(archive, {
+    mode: "between-markers",
+    startMarker: "РАЗДЕЛ 8.3.ПРОЕКТИРАНЕ И РАЗРАБОТВАНЕ",
+    endMarker: "РАЗДЕЛ 8.4.УПРАВЛЕНИЕ НА ПРОЦЕСИ",
+    occurrence: "last",
+    paragraphs: [{ text: "Клауза 8.3 не е приложима.", style: "heading1" }]
+  });
+  let xml = zip.readZip(section.buffer).find((entry) => entry.name === "word/document.xml").data.toString("utf8");
+  assert.match(xml, /Клауза 8\.3 не е приложима/);
+  assert.doesNotMatch(xml, /Чужд текст за сервиз и монтаж/);
+  assert.match(xml, /РАЗДЕЛ 8\.4\.УПРАВЛЕНИЕ НА ПРОЦЕСИ/);
+
+  const body = zip.rewriteWordDocumentContentWithStats(section.buffer, {
+    mode: "body",
+    paragraphs: [
+      { text: "ПЛАН ЗА УПРАВЛЕНИЕ НА РИСКА", style: "title" },
+      { text: "Риск от несъответстващ продукт.", style: "bullet" }
+    ]
+  });
+  xml = zip.readZip(body.buffer).find((entry) => entry.name === "word/document.xml").data.toString("utf8");
+  assert.match(xml, /ПЛАН ЗА УПРАВЛЕНИЕ НА РИСКА/);
+  assert.match(xml, /• Риск от несъответстващ продукт/);
+  assert.doesNotMatch(xml, /Стар финансов шаблон/);
+  assert.match(xml, /<w:sectPr\/>/);
+  assert.equal(section.changed, true);
+  assert.equal(body.changed, true);
+});
+
 test("DOCX and XLSX allow a replacement that contains the original text", () => {
   const source = "Old Company";
   const replacement = "Old Company (AI edit)";

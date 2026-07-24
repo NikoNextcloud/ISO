@@ -2,7 +2,18 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
-import { readZip, replaceSpreadsheetTextWithStats, replaceWordTextWithStats, writeZip, type OfficeImageReplacement, type WordLogoReplacement, type ZipEntry } from "@/lib/zip";
+import {
+  readZip,
+  replaceSpreadsheetTextWithStats,
+  replaceWordTextWithStats,
+  rewriteWordDocumentContentWithStats,
+  writeZip,
+  type OfficeImageReplacement,
+  type WordBodyParagraph,
+  type WordContentRewrite,
+  type WordLogoReplacement,
+  type ZipEntry
+} from "@/lib/zip";
 
 export type IsoExportRequest = {
   companyName: string;
@@ -111,6 +122,15 @@ export type IsoExportConfig = {
   logoMode: WordLogoReplacement["mode"];
   logoSourceHashes?: string[];
   pathCompanyNames?: string[];
+  pathYearReplacements?: Array<[string, "previousYear" | "currentYear"]>;
+  fileReplacements?: Array<{
+    fileNameIncludes: string;
+    replacements: (data: NormalizedExportData) => Array<[string, string]>;
+  }>;
+  wordContentRules?: Array<{
+    fileNameIncludes: string;
+    rewrite: (data: NormalizedExportData) => WordContentRewrite;
+  }>;
   contentRisks?: Array<{
     label: string;
     patterns: string[];
@@ -153,19 +173,192 @@ export const iso9001ExportConfig: IsoExportConfig = {
   edition: "ISO 9001:2015",
   templateDirectory: "iso9001",
   logoMode: "matching-images",
-  pathCompanyNames: ["Артпласт ЕООД", "Артпласт", "ДЕОН-БГ ЕООД", "ДЕОН-БГ"],
+  pathCompanyNames: [
+    "Артпласт ЕООД", "Артпласт", "ДЕОН-БГ ЕООД", "ДЕОН-БГ",
+    "БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ ООД", "БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ"
+  ],
+  pathYearReplacements: [["2019", "previousYear"], ["2020", "currentYear"]],
+  contentRisks: [
+    { label: "чужда фирма", patterns: ["АРТПЛАСТ", "ДЕОН-БГ", "БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ"] },
+    {
+      label: "чуждо съдържание за околна среда",
+      patterns: ["Система за управление на околната среда", "Обмен на информация по околна среда"]
+    },
+    {
+      label: "финансов или инвестиционен шаблон",
+      patterns: [
+        "инвестиционна стратегия", "търговска стратегия", "приемлива насрещна страна",
+        "финансови средства с незаконен произход", "инвестиционните посредници",
+        "клиентски активи", "ползвани от посредника", "работа на посредника"
+      ]
+    },
+    {
+      label: "чуждо съдържание за безопасност на храните",
+      patterns: ["безопасност на храните", "управление на безопасността на храните"]
+    },
+    { label: "стар отчетен период", patterns: ["за 2019 година", "за 2019 г.", "за 2020 година", "за 2020 г.", "за 2020 год."] },
+    { label: "грешен адрес в Ямбол", patterns: ["област Ямбол", "община Ямбол", "гр. Ямбол"] },
+    { label: "стар обучител", patterns: ["Сириус Груп С"] },
+    {
+      label: "чужди роли и процеси по продажби, магазини или сервиз",
+      patterns: [
+        "Продажби и магазини", "Търговски екип по развитие", "Ръководителят Проектиране и разработка",
+        "следпродажбена поддръжка", "след сервизна поддръжка", "осигурен качествен и надежден сервиз"
+      ]
+    },
+    { label: "неприложим стар нормативен списък", patterns: ["титанов диоксид", "вътреболничните инфекции", "инвестиционните проекти и/или упражняване на строителен надзор"] },
+    { label: "чужд профил „търговски услуги“", patterns: ["фирмата извършва търговски услуги"] }
+  ],
+  fileReplacements: [
+    {
+      fileNameIncludes: "НК - Ф - 2 Списък на заинтересованите страни.docx",
+      replacements: () => [
+        ["ПОС 4.4.3", "НК 4.2"],
+        ["Система за управление на околната среда", "Система за управление на качеството"],
+        ["Обмен на информация по околна среда, участие и консултиране", "Списък на заинтересованите страни и техните изисквания"]
+      ]
+    },
+    {
+      fileNameIncludes: "ПР 01 - Управление на документите.docx",
+      replacements: () => [
+        ["данни по качеството или безопасност на храните", "данни по качеството"],
+        ["интегрираната системата за управление", "системата за управление на качеството"],
+        ["Интегрираната система за управление", "Системата за управление на качеството"]
+      ]
+    },
+    {
+      fileNameIncludes: "ПР 05 - Коригиращи действия.docx",
+      replacements: () => [
+        ["разходи за качество и безопасност на храните", "разходи за качество"],
+        ["системата за управление на безопасността на храните", "системата за управление на качеството"]
+      ]
+    },
+    {
+      fileNameIncludes: "ПР 06 - Превантини действия.docx",
+      replacements: () => [
+        ["качеството и безопасността на храните", "качеството"]
+      ]
+    },
+    {
+      fileNameIncludes: "НК - Ф - 6 - Политика и цели.docx",
+      replacements: () => [
+        [
+          "Гарантиране на качеството и безопасността на хранителните продукти чрез проследимост и непрекъснато подобряване.",
+          "Гарантиране на качеството на продуктите и услугите чрез проследимост, контрол на процесите и непрекъснато подобряване."
+        ],
+        [
+          "изисквания на клиентите за качеството и безопасност на хранителните продукти",
+          "изисквания на клиентите за качеството на продуктите и услугите"
+        ],
+        ["безопасност на храните", "качество на продуктите и услугите"]
+      ]
+    },
+    {
+      fileNameIncludes: "Графиг на одита.docx",
+      replacements: (data) => [
+        ...yearPhraseReplacements(data),
+        ["Политика по качеството, БЗР и ОС", "Политика и цели по качеството"],
+        ...(data.designDevelopment === "not_applicable" ? [["Проектиране", "Управление на промените"] as [string, string]] : [])
+      ]
+    },
+    {
+      fileNameIncludes: "Заповед В О 2020.docx",
+      replacements: (data) => yearPhraseReplacements(data)
+    },
+    {
+      fileNameIncludes: "Рискове  2019.docx",
+      replacements: (data) => yearPhraseReplacements(data)
+    },
+    {
+      fileNameIncludes: "ПРОТОКОЛ ЗА ОБУЧЕНИЕ.docx",
+      replacements: (data) => replacementsWhen(data.trainingDetails, (training) => [
+        ["Водещ обучението: „Сириус Груп С“ ЕООД", `Водещ/описание на обучението: ${training}`]
+      ])
+    },
+    {
+      fileNameIncludes: "ПР 07 -  Процедура по закупуване.docx",
+      replacements: () => [
+        ["Ръководител (Продажби и магазини)", "Отговорник по доставките"],
+        ["Състояние на магазините", "Състояние на доставките"]
+      ]
+    },
+    {
+      fileNameIncludes: "ПР 10 -  Процедура за управление на поддръжката.docx",
+      replacements: () => [["сервизна поддръжка", "техническа поддръжка"]]
+    },
+    {
+      fileNameIncludes: "ПР 11 - Процедура за контрол на външни процеси, продукти и услуги.docx",
+      replacements: (data) => supplierProcedureReplacements(data)
+    },
+    {
+      fileNameIncludes: "Наръчник-9001.docx",
+      replacements: (data) => qualityManualReplacements(data)
+    }
+  ],
+  wordContentRules: [
+    {
+      fileNameIncludes: "ПЛАН ЗА УПРАВЛЕНИЕ НА РИСКА.docx",
+      rewrite: (data) => ({ mode: "body", paragraphs: iso9001RiskPlanBody(data) })
+    },
+    {
+      fileNameIncludes: "Доклад вътрешен одит.docx",
+      rewrite: (data) => ({ mode: "body", paragraphs: iso9001AuditReportBody(data) })
+    },
+    {
+      fileNameIncludes: "Преглед от ръководството 2020.docx",
+      rewrite: (data) => ({ mode: "body", paragraphs: iso9001ManagementReviewBody(data) })
+    },
+    {
+      fileNameIncludes: "ПР 01 - Управление на документите.docx",
+      rewrite: () => ({
+        mode: "from-marker",
+        marker: "ОД_01-03",
+        occurrence: "last",
+        paragraphs: [
+          { text: "ОД 01-03", style: "heading1" },
+          { text: "РЕГИСТЪР НА ПРИЛОЖИМИТЕ НОРМАТИВНИ И ДРУГИ ИЗИСКВАНИЯ", style: "heading1" },
+          {
+            text: "Организацията поддържа отделен актуален регистър само на нормативните, договорните, клиентските и техническите изисквания, приложими към нейната дейност, продукти, услуги и обхват на СУК. Регистърът се преглежда при промяна и най-малко веднъж годишно."
+          },
+          { text: "За всеки запис се посочват: източник, приложимо изискване, отговорно лице, начин за изпълнение, доказателство, дата на последен преглед и статус.", style: "bullet" }
+        ]
+      })
+    },
+    {
+      fileNameIncludes: "Наръчник-9001.docx",
+      rewrite: (data) => ({
+        mode: "between-markers",
+        startMarker: "РАЗДЕЛ 8.3.ПРОЕКТИРАНЕ И РАЗРАБОТВАНЕ",
+        endMarker: "РАЗДЕЛ 8.4.УПРАВЛЕНИЕ НА ПРОЦЕСИ",
+        occurrence: "last",
+        paragraphs: iso9001DesignSection(data)
+      })
+    }
+  ],
   replacements: (data) => {
     const result: Array<[string, string]> = [
       ["“Артпласт” ЕООД", data.companyName], ["“Артпласт“ ЕООД", data.companyName],
       ["„Артпласт” ЕООД", data.companyName], ["„Артпласт“ ЕООД", data.companyName],
       ["\"Артпласт\" ЕООД", data.companyName], ["Артпласт ЕООД", data.companyName],
-      ["ДЕОН-БГ ЕООД", data.companyName]
+      ["ДЕОН-БГ ЕООД", data.companyName],
+      ["\"БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ\" ООД", data.companyName],
+      ["„БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ“ ООД", data.companyName],
+      ["БАЛКАНРЕМОНТ ИНЖЕНЕРИНГ ООД", data.companyName]
     ];
     result.push(
       ...replacementsWhen(data.manager, (manager) => [
         ["ТОДОР ТОДОРОВ", manager.toLocaleUpperCase("bg")], ["Тодор Тодоров", manager], ["Боян Янев", manager]
       ]),
-      ...replacementsWhen(data.address, (address) => [["гр. Ямбол", address]]),
+      ...replacementsWhen(data.uic, (uic) => [["128575615", uic]]),
+      ...replacementsWhen(data.address, (address) => [
+        ["БЪЛГАРИЯ, област Ямбол, община Ямбол, гр. Ямбол, п.к. 8600 ул. Панайот Хитов № 9", address],
+        ["област Ямбол, община Ямбол, гр. Ямбол, п.к. 8600 ул. Панайот Хитов № 9", address]
+      ]),
+      ...replacementsWhen(data.city, (city) => [["гр. Ямбол", city.toLocaleLowerCase("bg").startsWith("гр.") ? city : `гр. ${city}`]]),
+      ...replacementsWhen(data.phone, (phone) => [["+359 46 663219", phone]]),
+      ...replacementsWhen(data.foundedAt, (foundedAt) => [
+        ["е дружество с ограничена отговорност, създадено през 1994 г.", `е ${data.legalForm || "дружество"}, създадено на ${formatDate(foundedAt)} г.`]
+      ]),
       ...replacementsWhen(data.scope, (scope) => [
         ["Печат и обработващи операции върху текстил, производство и търговия на текстил и текстилни изделия. Щампиране, обагряне, избелване, боядисване и конфекциониране на текстилни изделия и продукти. Внос, износ и търговия със синтетични и щапелни влакна.", scope]
       ]),
@@ -185,11 +378,220 @@ export const iso9001ExportConfig: IsoExportConfig = {
       ...replacementsWhen(data.version, (version) => [
         ["Версия: 001", `Версия: ${version}`], ["Версия:1", `Версия:${version}`], ["Версия 01", `Версия ${version}`],
         ["версия 01", `версия ${version}`]
-      ])
+      ]),
+      ...iso9001ContextReplacements(data)
     );
     return result;
   }
 };
+
+function yearPhraseReplacements(data: NormalizedExportData): Array<[string, string]> {
+  const result: Array<[string, string]> = [];
+  if (data.previousYear !== undefined) {
+    const year = String(data.previousYear);
+    result.push(
+      ["за 2019 година", `за ${year} година`],
+      ["за 2019 г.", `за ${year} г.`],
+      ["2019 година", `${year} година`]
+    );
+  }
+  if (data.currentYear !== undefined) {
+    const year = String(data.currentYear);
+    result.push(
+      ["за 2020 година", `за ${year} година`],
+      ["за 2020 год.", `за ${year} год.`],
+      ["за 2020 г.", `за ${year} г.`],
+      ["ЗА 2020 ГОДИНА", `ЗА ${year} ГОДИНА`],
+      ["ЗА 2020 ГОД.", `ЗА ${year} ГОД.`],
+      ["ЗА 2020 Г.", `ЗА ${year} Г.`],
+      ["ЗА 2020 г.", `ЗА ${year} г.`],
+      ["2020 година", `${year} година`],
+      ["2020г.", `${year} г.`]
+    );
+  }
+  return result;
+}
+
+function iso9001ContextReplacements(data: NormalizedExportData): Array<[string, string]> {
+  const activity = sentenceFragment(data.activity);
+  const productsServices = sentenceFragment(data.productsServices);
+  return [
+    ...yearPhraseReplacements(data),
+    ...replacementsWhen(activity, (value) => [
+      [
+        "Фирмата извършва търговски услуги, които съответстват на изискванията на продукта",
+        `${data.companyName} извършва ${value}, като осигурява съответствие на продуктите и услугите с договорените и приложимите изисквания`
+      ]
+    ]),
+    ...replacementsWhen(productsServices, (value) => [
+      ["доставените продукти", value],
+      ["вида и характеристиките на конкретния вид стоки и услуги", `характеристиките и изискванията към ${value}`]
+    ])
+  ];
+}
+
+function supplierProcedureReplacements(data: NormalizedExportData): Array<[string, string]> {
+  const activity = sentenceFragment(data.activity);
+  const externalProcesses = data.postDeliveryActivities
+    ? sentenceFragment(data.postDeliveryActivities)
+    : `доставки, транспорт, техническа поддръжка и други външно предоставяни процеси, свързани с ${activity}`;
+  return [
+    ["Ръководителят (Продажби & Магазини)", "Отговорникът по доставките"],
+    ["Ръководителят (Продажби и магазини)", "Отговорникът по доставките"],
+    ["Ръководителят (Продажба и магазини)", "Отговорникът по доставките"],
+    ["Ръководител (Продажби и магазини)", "Отговорник по доставките"],
+    ["Ръководител (Продажба и магазини)", "Отговорник по доставките"],
+    ["Ръководил (Продажба и магазинии)", "Отговорник по доставките"],
+    ["Ръководителя Дизайн и разработка", "Техническия отговорник"],
+    ["Ръководителят Проектиране и разработка", "Техническият отговорник"],
+    ["Ръководител Човешки ресурси", "Отговорника по персонала"],
+    ["Ръководителят Човешки ресурси", "Отговорникът по персонала"],
+    ["Началникът Предлагане на услуги", "Отговорникът по клиентските изисквания"],
+    ["Търговски екип по развитие", "Екип по оценка на доставчиците"],
+    ["Състояние на магазините", "Състояние на доставките"],
+    ["след сервизна поддръжка", "дейности след доставка"],
+    ["следпродажбена поддръжка", "дейности след доставка"],
+    [
+      "Нашата организация разбира необходимостта от контролиране на външните процеси от доставчици като \"монтаж\", \"инсталация\", \"след сервизна поддръжка\", „ремонт” и т.н. Поради тази прична нашата организация контролира външните процеси като подписва правно обвързващи договори с доставчиците, което позволява по-голяма сигурност за клиентите.",
+      `${data.companyName} определя и прилага контрол за външно предоставяните процеси, включително ${externalProcesses}. Видът и степента на контрол зависят от влиянието върху способността за постоянно предоставяне на съответстващи продукти и услуги. Изискванията, критериите за приемане, наблюдението и записите се определят предварително.`
+    ],
+    [
+      "Нашата организация разбира необходимостта от контролиране на външните процеси от доставчици като „монтаж“, „инсталация“, „следпродажбена поддръжка“, „ремонт“ и т.н. Поради тази причина нашата организация контролира външните процеси като подписва правно обвързващи договори с доставчиците, което позволява по-голяма сигурност за клиентите.",
+      `${data.companyName} определя и прилага контрол за външно предоставяните процеси, включително ${externalProcesses}. Видът и степента на контрол зависят от влиянието върху способността за постоянно предоставяне на съответстващи продукти и услуги. Изискванията, критериите за приемане, наблюдението и записите се определят предварително.`
+    ]
+  ];
+}
+
+function qualityManualReplacements(data: NormalizedExportData): Array<[string, string]> {
+  const activity = sentenceFragment(data.activity);
+  const productsServices = sentenceFragment(data.productsServices);
+  const result: Array<[string, string]> = [
+    [
+      "лидер на регионалния пазар, предлага печат и обработващи операции върху текстил, производство и търговия на текстил и текстилни изделия, щампиране, обагряне, избелване, боядисване и конфекциониране на текстилни изделия и продукти. Изкуствените кожи са в актуални цветове и с високо качество.",
+      `извършва ${activity}. Организацията предоставя ${productsServices} при контролирани условия и в съответствие с договорените и приложимите изисквания.`
+    ],
+    ["осигурен качествен и надежден сервиз.", "осигурена надеждна техническа поддръжка за закупеното оборудване и инфраструктура;"],
+    ["чертежи, схеми, планове, условия за приемане;", "спецификации, технически изисквания и условия за приемане;"]
+  ];
+  if (data.designDevelopment === "not_applicable") {
+    result.push([
+      "ОРГАНИЗАЦИЯТА НЕ ПРАВИ ИЗКЛЮЧЕНИЯ ПО СТАНДАРТА.",
+      `Клауза 8.3 „Проектиране и разработване“ не е приложима, тъй като ${data.companyName} предоставя ${productsServices} по утвърдени клиентски, нормативни и технологични изисквания и не извършва собствено проектиране на нови продукти или услуги. Всички останали изисквания на ISO 9001:2015 са приложими.`
+    ]);
+  }
+  return result;
+}
+
+function iso9001DesignSection(data: NormalizedExportData): WordBodyParagraph[] {
+  const productsServices = sentenceFragment(data.productsServices);
+  if (data.designDevelopment === "not_applicable") {
+    return [
+      { text: "РАЗДЕЛ 8.3. ПРОЕКТИРАНЕ И РАЗРАБОТВАНЕ", style: "heading1" },
+      {
+        text: `Клаузата не е приложима. ${data.companyName} предоставя ${productsServices} по утвърдени клиентски, нормативни и технологични изисквания и не извършва собствено проектиране и разработване на нови продукти или услуги.`
+      },
+      {
+        text: "Промените в изискванията, процесите, технологиите и документацията се идентифицират, преглеждат, одобряват и проследяват по контролиран ред."
+      }
+    ];
+  }
+  return [
+    { text: "РАЗДЕЛ 8.3. ПРОЕКТИРАНЕ И РАЗРАБОТВАНЕ", style: "heading1" },
+    { text: `Проектирането и разработването е приложимо за ${productsServices}.` },
+    { text: "Организацията определя входните изисквания, етапите, отговорностите, ресурсите, критериите за приемане и необходимите прегледи, проверки и валидиране.", style: "bullet" },
+    { text: "Изходните резултати трябва да изпълняват входните изисквания, да са подходящи за последващите процеси и да съдържат необходимите характеристики за безопасно и правилно предоставяне.", style: "bullet" },
+    { text: "Промените се идентифицират, преглеждат и одобряват, а резултатите и предприетите действия се съхраняват като документирана информация.", style: "bullet" }
+  ];
+}
+
+function iso9001RiskPlanBody(data: NormalizedExportData): WordBodyParagraph[] {
+  const activity = sentenceFragment(data.activity);
+  const processes = sentenceFragment(data.processesDescription);
+  const productsServices = sentenceFragment(data.productsServices);
+  const context = data.organizationContext;
+  return [
+    { text: "ПЛАН ЗА УПРАВЛЕНИЕ НА РИСКОВЕТЕ И ВЪЗМОЖНОСТИТЕ", style: "title" },
+    { text: `${data.companyName} | ISO 9001:2015 | Версия ${data.version} | В сила от ${formatDate(data.effectiveDate)} г.` },
+    { text: "1. Цел и обхват", style: "heading1" },
+    { text: `Планът определя реда за идентифициране, оценяване, третиране, наблюдение и преглед на рисковете и възможностите, свързани с ${activity} и обхвата на системата за управление на качеството.` },
+    { text: "2. Контекст", style: "heading1" },
+    { text: context },
+    { text: `Основни продукти и услуги: ${productsServices}.` },
+    { text: `Основни процеси: ${processes}.` },
+    { text: "3. Метод за оценяване", style: "heading1" },
+    { text: "Всеки риск се оценява по вероятност и въздействие. Определят се съществуващите контроли, необходимите действия, отговорник, срок, ресурс и остатъчен риск. Възможностите се оценяват според очакваната полза и необходимите ресурси." },
+    { text: "4. Основни групи рискове и контроли", style: "heading1" },
+    { text: `Несъответствие на ${productsServices} с клиентски или нормативни изисквания. Контрол: преглед на изискванията, критерии за приемане, проверки, записи и управление на промените.`, style: "bullet" },
+    { text: `Отклонения в процесите: ${processes}. Контрол: инструкции, компетентен персонал, наблюдение на показатели, проверки и коригиращи действия.`, style: "bullet" },
+    { text: "Рискове от външни доставчици. Контрол: предварителен избор, определени изисквания, входящ контрол, оценка на изпълнението и периодична преоценка.", style: "bullet" },
+    { text: "Недостатъчна компетентност или осъзнаване. Контрол: определяне на компетентности, обучение, оценка на ефективността и поддържане на записи.", style: "bullet" },
+    { text: "Повреда на оборудване, инфраструктура или средства за наблюдение и измерване. Контрол: поддръжка, проверки, калибриране, резервни решения и проследяване на състоянието.", style: "bullet" },
+    { text: "Загуба, неоторизирана промяна или използване на неактуална документирана информация. Контрол: версии, права за достъп, архивиране, резервни копия и контролирано разпространение.", style: "bullet" },
+    { text: "Промени в законови, пазарни, технологични и клиентски изисквания. Контрол: периодичен преглед на контекста, заинтересованите страни и приложимите изисквания.", style: "bullet" },
+    { text: "Прекъсване на критични процеси. Контрол: планове за реакция, отговорности, комуникация, резервни ресурси и периодични проверки на готовността.", style: "bullet" },
+    { text: "5. Отговорности", style: "heading1" },
+    { text: `Управителят ${data.manager} одобрява критериите и ресурсите. Собствениците на процеси идентифицират и наблюдават рисковете. Представителят на ръководството координира регистъра, сроковете и докладването.` },
+    { text: "6. Наблюдение и преглед", style: "heading1" },
+    { text: "Рисковете и възможностите се преглеждат при промени, несъответствия, рекламации, инциденти, резултати от одити и най-малко веднъж годишно при прегледа от ръководството. Предприетите действия се оценяват за ефективност." },
+    { text: `Одобрил: ${data.manager} ____________________    Дата: ${formatDate(data.effectiveDate)} г.` }
+  ];
+}
+
+function iso9001AuditReportBody(data: NormalizedExportData): WordBodyParagraph[] {
+  const designStatement = data.designDevelopment === "not_applicable"
+    ? "Клауза 8.3 е определена като неприложима и обосновката е проверена спрямо реалните продукти, услуги и процеси."
+    : "Клауза 8.3 е приложима и се проверяват планирането, входовете, контролите, изходите и промените при проектиране и разработване.";
+  return [
+    { text: "ДОКЛАД ОТ ВЪТРЕШЕН ОДИТ", style: "title" },
+    { text: `${data.companyName} | ISO 9001:2015 | Дата на одита: ${formatDate(data.internalAuditDate)} г.` },
+    { text: "1. Цел, обхват и критерии", style: "heading1" },
+    { text: `Целта е да се оцени съответствието и резултатността на СУК за ${sentenceFragment(data.activity)}. Обхват: ${sentenceFragment(data.scope)}. Критерии: ISO 9001:2015, вътрешната документация и приложимите договорни и нормативни изисквания.` },
+    { text: "2. Одитирани процеси", style: "heading1" },
+    { text: sentenceFragment(data.processesDescription) },
+    { text: "3. Проверени области", style: "heading1" },
+    { text: "Контекст, заинтересовани страни, обхват и процеси на СУК.", style: "bullet" },
+    { text: "Лидерство, политика, цели, роли и отговорности.", style: "bullet" },
+    { text: "Рискове и възможности, ресурси, компетентност, комуникация и документирана информация.", style: "bullet" },
+    { text: "Оперативно планиране, изисквания към продуктите и услугите, доставки, изпълнение, освобождаване и несъответстващи изходи.", style: "bullet" },
+    { text: designStatement, style: "bullet" },
+    { text: "Наблюдение, измерване, удовлетвореност на клиента, вътрешни одити, преглед от ръководството и подобрение.", style: "bullet" },
+    { text: "4. Констатации", style: "heading1" },
+    { text: "Съответствия и добри практики: ____________________________________________________________________" },
+    { text: "Несъответствия: _________________________________________________________________________________" },
+    { text: "Наблюдения и възможности за подобрение: __________________________________________________________" },
+    { text: "5. Заключение", style: "heading1" },
+    { text: "Заключението за съответствие и резултатност се попълва от одиторския екип въз основа на събраните обективни доказателства. За всяко несъответствие се определят причина, корекция, коригиращо действие, отговорник и срок." },
+    { text: "Водещ одитор: ____________________    Представител на одитираното звено: ____________________" }
+  ];
+}
+
+function iso9001ManagementReviewBody(data: NormalizedExportData): WordBodyParagraph[] {
+  const period = `${data.previousYear}–${data.currentYear}`;
+  return [
+    { text: "ПРЕГЛЕД ОТ РЪКОВОДСТВОТО", style: "title" },
+    { text: `${data.companyName} | ISO 9001:2015 | Дата: ${formatDate(data.managementReviewDate)} г. | Отчетен период: ${period}` },
+    { text: "1. Цел", style: "heading1" },
+    { text: "Да се оцени продължаващата пригодност, адекватност, резултатност и съответствие на системата за управление на качеството със стратегическата посока на организацията." },
+    { text: "2. Входни данни за прегледа", style: "heading1" },
+    { text: `Промени в контекста и заинтересованите страни: ${data.organizationContext}`, style: "bullet" },
+    { text: `Резултати от вътрешния одит от ${formatDate(data.internalAuditDate)} г. и статус на предходните действия.`, style: "bullet" },
+    { text: "Удовлетвореност на клиентите, обратна връзка, рекламации и изпълнение на договорените изисквания.", style: "bullet" },
+    { text: `Резултатност на процесите: ${sentenceFragment(data.processesDescription)}.`, style: "bullet" },
+    { text: "Съответствие на продуктите и услугите, несъответствия, корекции и коригиращи действия.", style: "bullet" },
+    { text: "Резултати от наблюдение и измерване, изпълнение на целите по качеството и показатели за процесите.", style: "bullet" },
+    { text: "Резултатност на външните доставчици и адекватност на ресурсите.", style: "bullet" },
+    { text: "Ефективност на действията за рискове и възможности и възможности за подобрение.", style: "bullet" },
+    { text: `Компетентност и обучения: ${data.trainingDetails}.`, style: "bullet" },
+    { text: "3. Решения и изходи", style: "heading1" },
+    { text: "Решения за подобряване на СУК, процесите, продуктите и услугите: __________________________________________" },
+    { text: "Необходими промени в СУК и документираната информация: _________________________________________________" },
+    { text: "Необходими ресурси, отговорници и срокове: ______________________________________________________________" },
+    { text: "Актуализирани цели и показатели за следващия период: ____________________________________________________" },
+    { text: "4. Проследяване", style: "heading1" },
+    { text: "Представителят на ръководството поддържа план на действията и докладва изпълнението. Ефективността се проверява при договорените срокове и при следващия преглед." },
+    { text: `Председател/Управител: ${data.manager} ____________________` }
+  ];
+}
 
 export const iso50001ExportConfig: IsoExportConfig = {
   code: "ISO 50001",
@@ -876,18 +1278,28 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
   for (const file of files) {
     let content = file.data ?? await fs.readFile(file.absolute!);
     const lowerName = file.relative.toLocaleLowerCase("bg");
-    const outputPath = replaceExportPath(file.relative, config.pathCompanyNames, data);
+    const outputPath = replaceExportPath(file.relative, config, data);
+    const fileSpecificReplacements = (config.fileReplacements ?? [])
+      .filter((rule) => lowerName.includes(rule.fileNameIncludes.toLocaleLowerCase("bg")))
+      .flatMap((rule) => rule.replacements(data));
+    const wordContentRules = (config.wordContentRules ?? [])
+      .filter((rule) => lowerName.includes(rule.fileNameIncludes.toLocaleLowerCase("bg")));
     let textReplacements = 0;
     let logoReplacements = 0;
     let replacedImages = 0;
     let aiTextReplacements = 0;
     let contentWarnings: string[] = [];
     if (lowerName.endsWith(".docx")) {
-      const result = replaceWordTextWithStats(content, replacements, logo, imageReplacements);
+      const result = replaceWordTextWithStats(content, [...replacements, ...fileSpecificReplacements], logo, imageReplacements);
       content = result.buffer;
       textReplacements = result.textReplacements;
       logoReplacements = result.logoReplacements;
       replacedImages = result.imageReplacements;
+      for (const rule of wordContentRules) {
+        const rewriteResult = rewriteWordDocumentContentWithStats(content, rule.rewrite(data));
+        content = rewriteResult.buffer;
+        textReplacements += rewriteResult.textReplacements;
+      }
       const aiReplacements = data.aiTextEdits
         .filter((edit) => edit.file === outputPath)
         .map((edit) => [edit.source, edit.replacement] as [string, string]);
@@ -899,7 +1311,7 @@ export async function createIsoSystemArchive(body: IsoExportRequest, config: Iso
       }
       contentWarnings = scanOfficeContent(content, config.contentRisks);
     } else if (lowerName.endsWith(".xlsx")) {
-      const result = replaceSpreadsheetTextWithStats(content, replacements, logo, imageReplacements);
+      const result = replaceSpreadsheetTextWithStats(content, [...replacements, ...fileSpecificReplacements], logo, imageReplacements);
       content = result.buffer;
       textReplacements = result.textReplacements;
       logoReplacements = result.logoReplacements;
@@ -1100,18 +1512,35 @@ function decodeOfficeXml(value: string) {
 }
 
 function validateExportContext(data: NormalizedExportData, config: IsoExportConfig) {
-  if (config.code !== "ISO 9001-14001-45001") return;
-  const required: Array<[string, unknown]> = [
-    ["ЕИК", data.uic], ["Седалище/адрес", data.address], ["Град", data.city], ["Управител", data.manager],
-    ["Дата на създаване", data.foundedAt], ["Дата на системата/влизане в сила", data.effectiveDate],
-    ["Обхват на дейност", data.activity], ["Продукти и услуги", data.productsServices],
-    ["Физически обхват", data.physicalScope], ["Контекст на организацията", data.organizationContext],
-    ["Процеси", data.processesDescription], ["Екологични аспекти", data.environmentalAspects],
-    ["Рискове по ЗБУТ", data.occupationalRisks], ["Външни заинтересовани страни", data.externalParties],
-    ["Управление на отпадъците", data.wasteManagement], ["Проектиране и разработване", data.designDevelopment],
-    ["Вътрешен одит", data.internalAuditDate], ["Преглед от ръководството", data.managementReviewDate],
-    ["Предходна година", data.previousYear], ["Настояща година", data.currentYear]
-  ];
+  let required: Array<[string, unknown]>;
+  if (config.code === "ISO 9001") {
+    required = [
+      ["ЕИК", data.uic], ["Седалище/адрес", data.address], ["Град", data.city], ["Управител", data.manager],
+      ["Дата на създаване", data.foundedAt], ["Дата на влизане в сила", data.effectiveDate], ["Версия", data.version],
+      ["Обхват на дейност", data.activity], ["Обхват на СУК", data.scope],
+      ["Продукти и услуги", data.productsServices], ["Физически обхват", data.physicalScope],
+      ["Контекст на организацията", data.organizationContext], ["Процеси", data.processesDescription],
+      ["Външни заинтересовани страни", data.externalParties],
+      ["Проектиране и разработване", data.designDevelopment],
+      ["Дейности след доставка", data.postDeliveryActivities], ["Обучения", data.trainingDetails],
+      ["Вътрешен одит", data.internalAuditDate], ["Преглед от ръководството", data.managementReviewDate],
+      ["Предходна година", data.previousYear], ["Настояща година", data.currentYear]
+    ];
+  } else if (config.code === "ISO 9001-14001-45001") {
+    required = [
+      ["ЕИК", data.uic], ["Седалище/адрес", data.address], ["Град", data.city], ["Управител", data.manager],
+      ["Дата на създаване", data.foundedAt], ["Дата на системата/влизане в сила", data.effectiveDate],
+      ["Обхват на дейност", data.activity], ["Продукти и услуги", data.productsServices],
+      ["Физически обхват", data.physicalScope], ["Контекст на организацията", data.organizationContext],
+      ["Процеси", data.processesDescription], ["Екологични аспекти", data.environmentalAspects],
+      ["Рискове по ЗБУТ", data.occupationalRisks], ["Външни заинтересовани страни", data.externalParties],
+      ["Управление на отпадъците", data.wasteManagement], ["Проектиране и разработване", data.designDevelopment],
+      ["Вътрешен одит", data.internalAuditDate], ["Преглед от ръководството", data.managementReviewDate],
+      ["Предходна година", data.previousYear], ["Настояща година", data.currentYear]
+    ];
+  } else {
+    return;
+  }
   const missing = required
     .filter(([, value]) => value === undefined || value === null || String(value).trim() === "")
     .map(([label]) => label);
@@ -1303,8 +1732,12 @@ function sentenceFragment(value: string) {
   return value.trim().replace(/[.;,:]+\s*$/u, "");
 }
 
-function replaceExportPath(value: string, sourceNames: string[] | undefined, data: NormalizedExportData) {
-  let result = replaceCompanyInPath(value, sourceNames, data.companyName);
+function replaceExportPath(value: string, config: IsoExportConfig, data: NormalizedExportData) {
+  let result = replaceCompanyInPath(value, config.pathCompanyNames, data.companyName);
+  for (const [sourceYear, targetField] of config.pathYearReplacements ?? []) {
+    const targetYear = data[targetField];
+    if (targetYear !== undefined) result = result.replaceAll(sourceYear, String(targetYear));
+  }
   if (data.currentYear !== undefined) result = result.replaceAll("2022", String(data.currentYear));
   return result;
 }
